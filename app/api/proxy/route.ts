@@ -1,10 +1,13 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
+import { Redis } from "@upstash/redis";
 
-// Simple in-memory cache (we will upgrade to Redis later)
-const cache = new Map<string, { response: any; timestamp: number }>();
-const CACHE_TTL = 1000 * 60 * 30; // 30 minutes
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL!,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+});
 
-// Detect if a task is simple or complex
+const CACHE_TTL = 1800;
+
 function detectComplexity(messages: any[]): "simple" | "complex" {
   const lastMessage = messages[messages.length - 1]?.content || "";
   const wordCount = lastMessage.split(" ").length;
@@ -13,18 +16,12 @@ function detectComplexity(messages: any[]): "simple" | "complex" {
   return isComplex ? "complex" : "simple";
 }
 
-// Pick the best model based on complexity
 function pickModel(complexity: "simple" | "complex", provider: string): string {
-  if (provider === "anthropic") {
-    return complexity === "simple" ? "claude-haiku-4-5-20241022" : "claude-sonnet-4-20250514";
-  }
-  if (provider === "openai") {
-    return complexity === "simple" ? "gpt-4o-mini" : "gpt-4o";
-  }
+  if (provider === "anthropic") return complexity === "simple" ? "claude-haiku-4-5-20241022" : "claude-sonnet-4-20250514";
+  if (provider === "openai") return complexity === "simple" ? "gpt-4o-mini" : "gpt-4o";
   return complexity === "simple" ? "gemini-1.5-flash" : "gemini-1.5-pro";
 }
 
-// Compress a prompt by removing extra whitespace and filler words
 function compressPrompt(text: string): { compressed: string; savedChars: number } {
   const original = text.length;
   let compressed = text.replace(/\s+/g, " ").trim();
@@ -32,9 +29,28 @@ function compressPrompt(text: string): { compressed: string; savedChars: number 
   return { compressed, savedChars: original - compressed.length };
 }
 
-// Create a cache key from messages
 function getCacheKey(messages: any[]): string {
-  return messages.map((m: any) => m.role + ":" + m.content).join("|");
+  const raw = messages.map((m: any) => m.role + ":" + m.content).join("|");
+  let hash = 0;
+  for (let i = 0; i < raw.length; i++) {
+    const char = raw.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return "cache:" + Math.abs(hash).toString(36);
+}
+
+async function logRequest(data: any) {
+  try {
+    const logs = (await redis.lrange("request_logs", 0, 99)) || [];
+    await redis.lpush("request_logs", JSON.stringify({ ...data, timestamp: Date.now() }));
+    await redis.ltrim("request_logs", 0, 499);
+
+    const today = new Date().toISOString().split("T")[0];
+    await redis.hincrby("stats:" + today, "total_requests", 1);
+    await redis.hincrby("stats:" + today, "tokens_saved", data.tokens_saved || 0);
+    await redis.hincrby("stats:" + today, "cache_hits", data.cache_hit ? 1 : 0);
+  } catch (e) {}
 }
 
 export async function POST(req: NextRequest) {
@@ -46,26 +62,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "messages and apiKey are required" }, { status: 400 });
     }
 
-    // Step 1: Check cache
     const cacheKey = getCacheKey(messages);
-    const cached = cache.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-      return NextResponse.json({
-        ...cached.response,
-        tokensave_meta: { cache_hit: true, tokens_saved: "100%", method: "cache" },
-      });
-    }
 
-    // Step 2: Detect complexity and pick model
+    try {
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        await logRequest({ cache_hit: true, tokens_saved: 500, provider, model: "cached" });
+        const cachedData = typeof cached === "string" ? JSON.parse(cached) : cached;
+        return NextResponse.json({ ...cachedData, tokensave_meta: { cache_hit: true, tokens_saved: "100%", method: "cache" } });
+      }
+    } catch (e) {}
+
     const complexity = detectComplexity(messages);
     const model = requestedModel || pickModel(complexity, provider);
-
-    // Step 3: Compress the last message
     const lastMsg = messages[messages.length - 1];
     const { compressed, savedChars } = compressPrompt(lastMsg.content);
     const optimizedMessages = [...messages.slice(0, -1), { ...lastMsg, content: compressed }];
 
-    // Step 4: Forward to the actual AI provider
     let apiUrl = "";
     let headers: any = { "Content-Type": "application/json" };
     let apiBody: any = {};
@@ -87,19 +100,13 @@ export async function POST(req: NextRequest) {
     const aiResponse = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify(apiBody) });
     const aiData = await aiResponse.json();
 
-    // Step 5: Cache the response
-    cache.set(cacheKey, { response: aiData, timestamp: Date.now() });
+    try { await redis.setex(cacheKey, CACHE_TTL, JSON.stringify(aiData)); } catch (e) {}
 
-    // Step 6: Return with metadata
+    await logRequest({ cache_hit: false, tokens_saved: savedChars, provider, model, complexity });
+
     return NextResponse.json({
       ...aiData,
-      tokensave_meta: {
-        cache_hit: false,
-        model_used: model,
-        complexity,
-        chars_saved: savedChars,
-        method: complexity === "simple" ? "routed_to_cheap" : "routed_to_smart",
-      },
+      tokensave_meta: { cache_hit: false, model_used: model, complexity, chars_saved: savedChars, method: complexity === "simple" ? "routed_to_cheap" : "routed_to_smart" },
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
