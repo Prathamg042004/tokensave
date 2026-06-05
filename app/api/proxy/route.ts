@@ -112,4 +112,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
-
+export async function GET() {
+  return Response.json({
+    status: "active",
+    message: "TokenSave API is running. Send POST requests to use the proxy.",
+    usage: {
+      method: "POST",
+      body: {
+        provider: "anthropic | openai | google",
+        apiKey: "your-api-key",
+        messages: [{ role: "user", content: "your prompt" }]
+      }
+    }
+  });
+}
