@@ -1,160 +1,99 @@
 ﻿"use client";
-import { useState, useEffect } from "react";
-import { supabase } from "./supabase";
 import { useRouter } from "next/navigation";
 
-export default function Dashboard() {
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("overview");
-  const [stats, setStats] = useState<any>(null);
+export default function Landing() {
   const router = useRouter();
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (data.user) { setUser(data.user); } else { router.push("/login"); }
-      setLoading(false);
-    });
-    fetchStats();
-    const interval = setInterval(fetchStats, 10000);
-    return () => clearInterval(interval);
-  }, [router]);
-
-  const fetchStats = async () => {
-    try {
-      const res = await fetch("/api/stats");
-      const data = await res.json();
-      setStats(data);
-    } catch (e) {}
-  };
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push("/login");
-  };
-
-  if (loading) return <div className="min-h-screen bg-gray-950 flex items-center justify-center text-gray-400">Loading...</div>;
-
-  const todayStats = stats?.today || { total_requests: 0, tokens_saved: 0, cache_hits: 0 };
-  const cacheRate = todayStats.total_requests > 0 ? Math.round((todayStats.cache_hits / todayStats.total_requests) * 100) : 0;
-  const moneySaved = (todayStats.tokens_saved * 0.000003).toFixed(2);
-
-  const statCards = [
-    { label: "Total Requests Today", value: todayStats.total_requests.toLocaleString(), change: "Live", color: "text-cyan-400" },
-    { label: "Tokens Saved", value: todayStats.tokens_saved.toLocaleString(), change: "Live", color: "text-green-400" },
-    { label: "Est. Money Saved", value: "$" + moneySaved, change: "Live", color: "text-emerald-400" },
-    { label: "Cache Hit Rate", value: cacheRate + "%", change: "Live", color: "text-amber-400" },
-  ];
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
-      <div className="fixed left-0 top-0 h-full w-56 bg-gray-900 border-r border-gray-800 p-4 flex flex-col">
-        <div className="flex items-center gap-2 mb-8">
+      <nav className="flex justify-between items-center px-8 py-4 border-b border-gray-800">
+        <div className="flex items-center gap-2">
           <span className="text-2xl">⚡</span>
           <span className="text-xl font-bold text-cyan-400">TokenSave</span>
         </div>
-        <nav className="flex flex-col gap-1">
-          {["overview", "api-keys", "playground", "analytics", "settings"].map((tab) => (
-            <button key={tab} onClick={() => tab === "playground" ? router.push("/playground") : setActiveTab(tab)} className={"text-left px-3 py-2 rounded-lg text-sm capitalize transition-colors " + (activeTab === tab ? "bg-cyan-400/10 text-cyan-400 font-semibold" : "text-gray-400 hover:text-gray-200 hover:bg-gray-800")}>
-              {tab === "overview" ? "📊 " : tab === "api-keys" ? "🔑 " : tab === "playground" ? "🧪 " : tab === "analytics" ? "📈 " : "⚙️ "}{tab}
-            </button>
-          ))}
-        </nav>
-        <button onClick={handleLogout} className="mt-auto px-3 py-2 text-sm text-red-400 hover:bg-red-400/10 rounded-lg text-left">🚪 Log Out</button>
-      </div>
-      <div className="ml-56 p-8">
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-2xl font-bold">Dashboard</h1>
-            <p className="text-gray-500 text-sm">{user?.email}</p>
-          </div>
-          <span className="text-xs bg-green-400/10 text-green-400 px-3 py-1 rounded-full">● Live — refreshes every 10s</span>
+        <div className="flex gap-4">
+          <button onClick={() => router.push("/login")} className="px-4 py-2 text-gray-400 hover:text-white text-sm">Sign In</button>
+          <button onClick={() => router.push("/login")} className="px-4 py-2 bg-cyan-400 text-gray-950 rounded-lg text-sm font-semibold hover:bg-cyan-300">Start Free Trial</button>
         </div>
-        <div className="grid grid-cols-4 gap-4 mb-8">
-          {statCards.map((stat) => (
-            <div key={stat.label} className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-              <p className="text-gray-500 text-xs mb-1">{stat.label}</p>
-              <p className={"text-2xl font-bold " + stat.color}>{stat.value}</p>
-              <p className="text-green-400 text-xs mt-1">{stat.change}</p>
-            </div>
-          ))}
+      </nav>
+
+      <div className="max-w-4xl mx-auto px-8 py-20 text-center">
+        <div className="inline-block px-4 py-1 bg-cyan-400/10 text-cyan-400 rounded-full text-sm mb-6">Save 50-60% on AI API costs</div>
+        <h1 className="text-5xl font-bold mb-6 leading-tight">Stop overpaying for<br /><span className="text-cyan-400">AI API calls</span></h1>
+        <p className="text-gray-400 text-lg mb-8 max-w-2xl mx-auto">TokenSave sits between your app and AI providers like Claude, GPT, and Gemini. We automatically cache, route, and compress every request to cut your bill by 50-60%.</p>
+        <div className="flex gap-4 justify-center mb-16">
+          <button onClick={() => router.push("/login")} className="px-8 py-3 bg-cyan-400 text-gray-950 rounded-lg font-semibold hover:bg-cyan-300 text-lg">Start 14-Day Free Trial</button>
+          <button onClick={() => router.push("/playground")} className="px-8 py-3 border border-gray-700 text-gray-300 rounded-lg hover:bg-gray-800 text-lg">Try Playground</button>
         </div>
 
-        {activeTab === "overview" && (
-          <div className="space-y-6">
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-              <h2 className="text-lg font-semibold mb-4">Your API Endpoint</h2>
-              <p className="text-gray-400 text-sm mb-3">Replace your AI provider URL with this:</p>
-              <div className="bg-gray-800 rounded-lg p-4 font-mono text-cyan-400 text-sm break-all">https://tokensave.vercel.app/api/proxy</div>
-              <p className="text-gray-500 text-xs mt-3">Send POST requests with: messages, provider, apiKey</p>
-            </div>
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-              <h2 className="text-lg font-semibold mb-4">Quick Start Example</h2>
-              <pre className="bg-gray-800 rounded-lg p-4 text-sm text-gray-300 overflow-x-auto">{etch("https://tokensave.vercel.app/api/proxy", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    provider: "anthropic",
-    apiKey: "your-api-key",
-    messages: [{ role: "user", content: "Hello!" }]
-  })
-})}</pre>
-            </div>
+        <div className="grid grid-cols-3 gap-6 mb-20">
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 text-left">
+            <span className="text-3xl mb-3 block">💾</span>
+            <h3 className="font-semibold text-lg mb-2">Smart Cache</h3>
+            <p className="text-gray-400 text-sm">Similar query asked before? We return the cached answer instantly. Zero API cost, zero latency.</p>
           </div>
-        )}
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 text-left">
+            <span className="text-3xl mb-3 block">🔀</span>
+            <h3 className="font-semibold text-lg mb-2">Model Router</h3>
+            <p className="text-gray-400 text-sm">Simple questions go to cheap models. Complex tasks go to powerful ones. You save money without losing quality.</p>
+          </div>
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 text-left">
+            <span className="text-3xl mb-3 block">✂️</span>
+            <h3 className="font-semibold text-lg mb-2">Prompt Compressor</h3>
+            <p className="text-gray-400 text-sm">We strip filler words and redundancy from every prompt. Same meaning, fewer tokens, lower cost.</p>
+          </div>
+        </div>
 
-        {activeTab === "analytics" && (
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-            <h2 className="text-lg font-semibold mb-4">Recent Requests</h2>
-            {stats?.recent_logs?.length > 0 ? (
-              <table className="w-full">
-                <thead>
-                  <tr className="text-gray-500 text-xs text-left border-b border-gray-800">
-                    <th className="pb-3">Provider</th>
-                    <th className="pb-3">Model</th>
-                    <th className="pb-3">Cache Hit</th>
-                    <th className="pb-3">Tokens Saved</th>
-                    <th className="pb-3">Time</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stats.recent_logs.map((log: any, i: number) => (
-                    <tr key={i} className="border-b border-gray-800/50 text-sm">
-                      <td className="py-3 text-gray-300">{log.provider || "—"}</td>
-                      <td className="py-3"><span className="px-2 py-0.5 rounded text-xs bg-cyan-400/10 text-cyan-400">{log.model || "—"}</span></td>
-                      <td className="py-3">{log.cache_hit ? <span className="text-green-400">Yes ✓</span> : <span className="text-gray-500">No</span>}</td>
-                      <td className="py-3 text-green-400">+{log.tokens_saved || 0}</td>
-                      <td className="py-3 text-gray-500 text-xs">{log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <p className="text-gray-500 text-sm">No requests yet. Try the playground to generate some data!</p>
-            )}
-          </div>
-        )}
-
-        {activeTab === "settings" && (
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-            <h2 className="text-lg font-semibold mb-4">Account Settings</h2>
-            <div className="space-y-4">
-              <div>
-                <p className="text-gray-400 text-sm">Email</p>
-                <p className="text-gray-200">{user?.email}</p>
-              </div>
-              <div>
-                <p className="text-gray-400 text-sm">User ID</p>
-                <p className="text-gray-200 font-mono text-sm">{user?.id}</p>
-              </div>
-              <div>
-                <p className="text-gray-400 text-sm">Plan</p>
-                <p className="text-cyan-400 font-semibold">Free Trial — 13 days left</p>
-              </div>
+        <div className="mb-20">
+          <h2 className="text-3xl font-bold mb-10">Simple pricing</h2>
+          <div className="grid grid-cols-3 gap-6">
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+              <h3 className="font-semibold text-lg mb-1">Starter</h3>
+              <p className="text-3xl font-bold text-cyan-400 mb-1"><span className="text-sm text-gray-500">/mo</span></p>
+              <p className="text-gray-500 text-sm mb-4">For small startups</p>
+              <ul className="text-sm text-gray-400 space-y-2 text-left">
+                <li>✓ Up to 50K requests/mo</li>
+                <li>✓ Smart caching</li>
+                <li>✓ Model routing</li>
+                <li>✓ Basic dashboard</li>
+              </ul>
+            </div>
+            <div className="bg-gray-900 border-2 border-cyan-400 rounded-xl p-6 relative">
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-cyan-400 text-gray-950 text-xs font-bold px-3 py-1 rounded-full">POPULAR</div>
+              <h3 className="font-semibold text-lg mb-1">Growth</h3>
+              <p className="text-3xl font-bold text-cyan-400 mb-1"><span className="text-sm text-gray-500">/mo</span></p>
+              <p className="text-gray-500 text-sm mb-4">For growing teams</p>
+              <ul className="text-sm text-gray-400 space-y-2 text-left">
+                <li>✓ Up to 500K requests/mo</li>
+                <li>✓ Everything in Starter</li>
+                <li>✓ Prompt compression</li>
+                <li>✓ Team management</li>
+                <li>✓ Priority support</li>
+              </ul>
+            </div>
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+              <h3 className="font-semibold text-lg mb-1">Enterprise</h3>
+              <p className="text-3xl font-bold text-cyan-400 mb-1">Custom</p>
+              <p className="text-gray-500 text-sm mb-4">For large companies</p>
+              <ul className="text-sm text-gray-400 space-y-2 text-left">
+                <li>✓ Unlimited requests</li>
+                <li>✓ Everything in Growth</li>
+                <li>✓ Custom routing rules</li>
+                <li>✓ Dedicated support</li>
+                <li>✓ SLA guarantee</li>
+              </ul>
             </div>
           </div>
-        )}
+        </div>
+
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-10">
+          <h2 className="text-2xl font-bold mb-3">Ready to cut your AI costs?</h2>
+          <p className="text-gray-400 mb-6">Start your free 14-day trial. No credit card required.</p>
+          <button onClick={() => router.push("/login")} className="px-8 py-3 bg-cyan-400 text-gray-950 rounded-lg font-semibold hover:bg-cyan-300 text-lg">Get Started Free</button>
+        </div>
       </div>
+
+      <footer className="border-t border-gray-800 px-8 py-6 text-center text-gray-500 text-sm mt-20">© 2026 TokenSave. All rights reserved.</footer>
     </div>
   );
 }

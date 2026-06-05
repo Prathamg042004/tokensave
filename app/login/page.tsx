@@ -19,7 +19,7 @@ export default function LoginPage() {
       if (error) { setMessage(error.message); } else { setMessage("Check your email to confirm your account!"); }
     } else {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) { setMessage(error.message); } else { router.push("/"); }
+      if (error) { setMessage(error.message); } else { router.push("/dashboard"); }
     }
     setLoading(false);
   };
@@ -43,3 +43,4 @@ export default function LoginPage() {
     </div>
   );
 }
+
