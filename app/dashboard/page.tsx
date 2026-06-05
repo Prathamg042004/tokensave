@@ -63,7 +63,7 @@ export default function Dashboard() {
         {activeTab === "overview" && (
           <div className="space-y-6">
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-6"><h2 className="text-lg font-semibold mb-4">Your API Endpoint</h2><p className="text-gray-400 text-sm mb-3">Replace your AI provider URL with this:</p><div className="bg-gray-800 rounded-lg p-4 font-mono text-cyan-400 text-sm break-all">https://tokensave.vercel.app/api/proxy</div></div>
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-6"><h2 className="text-lg font-semibold mb-4">Quick Start</h2><pre className="bg-gray-800 rounded-lg p-4 text-sm text-gray-300 overflow-x-auto">{etch("https://tokensave.vercel.app/api/proxy", {
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-6"><h2 className="text-lg font-semibold mb-4">Quick Start</h2><pre className="bg-gray-800 rounded-lg p-4 text-sm text-gray-300 overflow-x-auto">{fetch("https://tokensave.vercel.app/api/proxy", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
