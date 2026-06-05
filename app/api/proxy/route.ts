@@ -19,7 +19,7 @@ function detectComplexity(messages: any[]): "simple" | "complex" {
 function pickModel(complexity: "simple" | "complex", provider: string): string {
   if (provider === "anthropic") return complexity === "simple" ? "claude-haiku-4-5-20241022" : "claude-sonnet-4-20250514";
   if (provider === "openai") return complexity === "simple" ? "gpt-4o-mini" : "gpt-4o";
-  return complexity === "simple" ? "gemini-1.5-flash" : "gemini-1.5-pro";
+  return complexity === "simple" ? "gemini-2.0-flash-lite" : "gemini-2.0-flash";
 }
 
 function compressPrompt(text: string): { compressed: string; savedChars: number } {
