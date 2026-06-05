@@ -7,6 +7,7 @@ export default function Dashboard() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
+  const [stats, setStats] = useState<any>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -14,7 +15,18 @@ export default function Dashboard() {
       if (data.user) { setUser(data.user); } else { router.push("/login"); }
       setLoading(false);
     });
+    fetchStats();
+    const interval = setInterval(fetchStats, 10000);
+    return () => clearInterval(interval);
   }, [router]);
+
+  const fetchStats = async () => {
+    try {
+      const res = await fetch("/api/stats");
+      const data = await res.json();
+      setStats(data);
+    } catch (e) {}
+  };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -23,11 +35,15 @@ export default function Dashboard() {
 
   if (loading) return <div className="min-h-screen bg-gray-950 flex items-center justify-center text-gray-400">Loading...</div>;
 
-  const stats = [
-    { label: "Total Requests", value: "0", change: "New", color: "text-cyan-400" },
-    { label: "Tokens Saved", value: "0", change: "New", color: "text-green-400" },
-    { label: "Money Saved", value: "$0", change: "New", color: "text-emerald-400" },
-    { label: "Cache Hit Rate", value: "0%", change: "New", color: "text-amber-400" },
+  const todayStats = stats?.today || { total_requests: 0, tokens_saved: 0, cache_hits: 0 };
+  const cacheRate = todayStats.total_requests > 0 ? Math.round((todayStats.cache_hits / todayStats.total_requests) * 100) : 0;
+  const moneySaved = (todayStats.tokens_saved * 0.000003).toFixed(2);
+
+  const statCards = [
+    { label: "Total Requests Today", value: todayStats.total_requests.toLocaleString(), change: "Live", color: "text-cyan-400" },
+    { label: "Tokens Saved", value: todayStats.tokens_saved.toLocaleString(), change: "Live", color: "text-green-400" },
+    { label: "Est. Money Saved", value: "$" + moneySaved, change: "Live", color: "text-emerald-400" },
+    { label: "Cache Hit Rate", value: cacheRate + "%", change: "Live", color: "text-amber-400" },
   ];
 
   return (
@@ -38,9 +54,9 @@ export default function Dashboard() {
           <span className="text-xl font-bold text-cyan-400">TokenSave</span>
         </div>
         <nav className="flex flex-col gap-1">
-          {["overview", "api-keys", "router", "analytics", "settings"].map((tab) => (
-            <button key={tab} onClick={() => setActiveTab(tab)} className={"text-left px-3 py-2 rounded-lg text-sm capitalize transition-colors " + (activeTab === tab ? "bg-cyan-400/10 text-cyan-400 font-semibold" : "text-gray-400 hover:text-gray-200 hover:bg-gray-800")}>
-              {tab === "overview" ? "📊 " : tab === "api-keys" ? "🔑 " : tab === "router" ? "🔀 " : tab === "analytics" ? "📈 " : "⚙️ "}{tab}
+          {["overview", "api-keys", "playground", "analytics", "settings"].map((tab) => (
+            <button key={tab} onClick={() => tab === "playground" ? router.push("/playground") : setActiveTab(tab)} className={"text-left px-3 py-2 rounded-lg text-sm capitalize transition-colors " + (activeTab === tab ? "bg-cyan-400/10 text-cyan-400 font-semibold" : "text-gray-400 hover:text-gray-200 hover:bg-gray-800")}>
+              {tab === "overview" ? "📊 " : tab === "api-keys" ? "🔑 " : tab === "playground" ? "🧪 " : tab === "analytics" ? "📈 " : "⚙️ "}{tab}
             </button>
           ))}
         </nav>
@@ -52,10 +68,10 @@ export default function Dashboard() {
             <h1 className="text-2xl font-bold">Dashboard</h1>
             <p className="text-gray-500 text-sm">{user?.email}</p>
           </div>
-          <span className="text-xs bg-green-400/10 text-green-400 px-3 py-1 rounded-full">● System Active</span>
+          <span className="text-xs bg-green-400/10 text-green-400 px-3 py-1 rounded-full">● Live — refreshes every 10s</span>
         </div>
         <div className="grid grid-cols-4 gap-4 mb-8">
-          {stats.map((stat) => (
+          {statCards.map((stat) => (
             <div key={stat.label} className="bg-gray-900 border border-gray-800 rounded-xl p-5">
               <p className="text-gray-500 text-xs mb-1">{stat.label}</p>
               <p className={"text-2xl font-bold " + stat.color}>{stat.value}</p>
@@ -63,20 +79,78 @@ export default function Dashboard() {
             </div>
           ))}
         </div>
-        {activeTab === "api-keys" && (
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-            <h2 className="text-lg font-semibold mb-4">Your API Endpoint</h2>
-            <p className="text-gray-400 text-sm mb-4">Replace your AI provider URL with this TokenSave URL:</p>
-            <div className="bg-gray-800 rounded-lg p-4 font-mono text-cyan-400 text-sm">https://your-app.vercel.app/api/proxy</div>
+
+        {activeTab === "overview" && (
+          <div className="space-y-6">
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+              <h2 className="text-lg font-semibold mb-4">Your API Endpoint</h2>
+              <p className="text-gray-400 text-sm mb-3">Replace your AI provider URL with this:</p>
+              <div className="bg-gray-800 rounded-lg p-4 font-mono text-cyan-400 text-sm break-all">https://tokensave.vercel.app/api/proxy</div>
+              <p className="text-gray-500 text-xs mt-3">Send POST requests with: messages, provider, apiKey</p>
+            </div>
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+              <h2 className="text-lg font-semibold mb-4">Quick Start Example</h2>
+              <pre className="bg-gray-800 rounded-lg p-4 text-sm text-gray-300 overflow-x-auto">{etch("https://tokensave.vercel.app/api/proxy", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    provider: "anthropic",
+    apiKey: "your-api-key",
+    messages: [{ role: "user", content: "Hello!" }]
+  })
+})}</pre>
+            </div>
           </div>
         )}
-        {activeTab === "overview" && (
+
+        {activeTab === "analytics" && (
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-            <h2 className="text-lg font-semibold mb-4">Getting Started</h2>
-            <div className="space-y-3 text-sm text-gray-400">
-              <p>1. Go to <button onClick={() => setActiveTab("api-keys")} className="text-cyan-400 underline">API Keys</button> to get your proxy endpoint</p>
-              <p>2. Replace your AI API URL with the TokenSave proxy URL</p>
-              <p>3. All requests will be automatically optimized</p>
+            <h2 className="text-lg font-semibold mb-4">Recent Requests</h2>
+            {stats?.recent_logs?.length > 0 ? (
+              <table className="w-full">
+                <thead>
+                  <tr className="text-gray-500 text-xs text-left border-b border-gray-800">
+                    <th className="pb-3">Provider</th>
+                    <th className="pb-3">Model</th>
+                    <th className="pb-3">Cache Hit</th>
+                    <th className="pb-3">Tokens Saved</th>
+                    <th className="pb-3">Time</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stats.recent_logs.map((log: any, i: number) => (
+                    <tr key={i} className="border-b border-gray-800/50 text-sm">
+                      <td className="py-3 text-gray-300">{log.provider || "—"}</td>
+                      <td className="py-3"><span className="px-2 py-0.5 rounded text-xs bg-cyan-400/10 text-cyan-400">{log.model || "—"}</span></td>
+                      <td className="py-3">{log.cache_hit ? <span className="text-green-400">Yes ✓</span> : <span className="text-gray-500">No</span>}</td>
+                      <td className="py-3 text-green-400">+{log.tokens_saved || 0}</td>
+                      <td className="py-3 text-gray-500 text-xs">{log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <p className="text-gray-500 text-sm">No requests yet. Try the playground to generate some data!</p>
+            )}
+          </div>
+        )}
+
+        {activeTab === "settings" && (
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+            <h2 className="text-lg font-semibold mb-4">Account Settings</h2>
+            <div className="space-y-4">
+              <div>
+                <p className="text-gray-400 text-sm">Email</p>
+                <p className="text-gray-200">{user?.email}</p>
+              </div>
+              <div>
+                <p className="text-gray-400 text-sm">User ID</p>
+                <p className="text-gray-200 font-mono text-sm">{user?.id}</p>
+              </div>
+              <div>
+                <p className="text-gray-400 text-sm">Plan</p>
+                <p className="text-cyan-400 font-semibold">Free Trial — 13 days left</p>
+              </div>
             </div>
           </div>
         )}
