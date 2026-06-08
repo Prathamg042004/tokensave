@@ -2,11 +2,29 @@
 import { Redis } from "@upstash/redis";
 
 const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL!,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+  url: process.env.UPSTASH_REDIS_REST_URL || "",
+  token: process.env.UPSTASH_REDIS_REST_TOKEN || "",
 });
 
 const CACHE_TTL = 1800;
+const RATE_LIMIT = 60;
+const RATE_WINDOW = 60;
+
+async function checkRateLimit(identifier: string): Promise<{ allowed: boolean; remaining: number }> {
+  const key = "rl:" + identifier;
+  const current = await redis.incr(key);
+  if (current === 1) {
+    await redis.expire(key, RATE_WINDOW);
+  }
+  return { allowed: current <= RATE_LIMIT, remaining: Math.max(0, RATE_LIMIT - current) };
+}
+
+async function validateTokenSaveKey(tsKey: string): Promise<any> {
+  if (!tsKey) return null;
+  const owner = await redis.get("key_owner:" + tsKey);
+  if (!owner) return null;
+  return typeof owner === "string" ? JSON.parse(owner) : owner;
+}
 
 function detectComplexity(messages: any[]): "simple" | "complex" {
   const lastMessage = messages[messages.length - 1]?.content || "";
@@ -42,10 +60,8 @@ function getCacheKey(messages: any[]): string {
 
 async function logRequest(data: any) {
   try {
-    const logs = (await redis.lrange("request_logs", 0, 99)) || [];
     await redis.lpush("request_logs", JSON.stringify({ ...data, timestamp: Date.now() }));
     await redis.ltrim("request_logs", 0, 499);
-
     const today = new Date().toISOString().split("T")[0];
     await redis.hincrby("stats:" + today, "total_requests", 1);
     await redis.hincrby("stats:" + today, "tokens_saved", data.tokens_saved || 0);
@@ -56,10 +72,25 @@ async function logRequest(data: any) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { messages, provider = "anthropic", apiKey, model: requestedModel } = body;
+    const { messages, provider = "anthropic", apiKey, model: requestedModel, tsKey } = body;
 
     if (!messages || !apiKey) {
       return NextResponse.json({ error: "messages and apiKey are required" }, { status: 400 });
+    }
+
+    const rateLimitId = tsKey || req.headers.get("x-forwarded-for") || "anonymous";
+    const { allowed, remaining } = await checkRateLimit(rateLimitId);
+
+    if (!allowed) {
+      return NextResponse.json(
+        { error: "Rate limit exceeded. Max 60 requests per minute.", remaining: 0 },
+        { status: 429, headers: { "X-RateLimit-Remaining": "0", "X-RateLimit-Limit": String(RATE_LIMIT) } }
+      );
+    }
+
+    let owner = null;
+    if (tsKey) {
+      owner = await validateTokenSaveKey(tsKey);
     }
 
     const cacheKey = getCacheKey(messages);
@@ -67,9 +98,12 @@ export async function POST(req: NextRequest) {
     try {
       const cached = await redis.get(cacheKey);
       if (cached) {
-        await logRequest({ cache_hit: true, tokens_saved: 500, provider, model: "cached" });
+        await logRequest({ cache_hit: true, tokens_saved: 500, provider, model: "cached", user: owner?.userId });
         const cachedData = typeof cached === "string" ? JSON.parse(cached) : cached;
-        return NextResponse.json({ ...cachedData, tokensave_meta: { cache_hit: true, tokens_saved: "100%", method: "cache" } });
+        return NextResponse.json({
+          ...cachedData,
+          tokensave_meta: { cache_hit: true, tokens_saved: "100%", method: "cache", rate_limit_remaining: remaining },
+        });
       }
     } catch (e) {}
 
@@ -102,27 +136,50 @@ export async function POST(req: NextRequest) {
 
     try { await redis.setex(cacheKey, CACHE_TTL, JSON.stringify(aiData)); } catch (e) {}
 
-    await logRequest({ cache_hit: false, tokens_saved: savedChars, provider, model, complexity });
+    await logRequest({ cache_hit: false, tokens_saved: savedChars, provider, model, complexity, user: owner?.userId });
 
     return NextResponse.json({
       ...aiData,
-      tokensave_meta: { cache_hit: false, model_used: model, complexity, chars_saved: savedChars, method: complexity === "simple" ? "routed_to_cheap" : "routed_to_smart" },
+      tokensave_meta: {
+        cache_hit: false,
+        model_used: model,
+        complexity,
+        chars_saved: savedChars,
+        method: complexity === "simple" ? "routed_to_cheap" : "routed_to_smart",
+        rate_limit_remaining: remaining,
+      },
+    }, {
+      headers: { "X-RateLimit-Remaining": String(remaining), "X-RateLimit-Limit": String(RATE_LIMIT) },
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
 export async function GET() {
-  return Response.json({
+  return NextResponse.json({
     status: "active",
-    message: "TokenSave API is running. Send POST requests to use the proxy.",
-    usage: {
-      method: "POST",
-      body: {
-        provider: "anthropic | openai | google",
-        apiKey: "your-api-key",
-        messages: [{ role: "user", content: "your prompt" }]
-      }
-    }
+    service: "TokenSave API Proxy",
+    version: "1.0.0",
+    rate_limit: "60 requests/minute",
+    docs: "https://tokensave.vercel.app/docs",
+    endpoints: {
+      proxy: {
+        method: "POST",
+        url: "https://tokensave.vercel.app/api/proxy",
+        body: {
+          provider: "anthropic | openai | google",
+          apiKey: "your-provider-api-key",
+          tsKey: "(optional) your TokenSave API key",
+          messages: [{ role: "user", content: "your prompt" }],
+        },
+      },
+    },
+    features: [
+      "Semantic caching — 100% savings on repeated queries",
+      "Model routing — simple tasks to cheap models, complex to powerful",
+      "Prompt compression — removes filler words and whitespace",
+      "Rate limiting — 60 requests/minute per key",
+    ],
   });
 }
