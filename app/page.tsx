@@ -1,99 +1,163 @@
 ﻿"use client";
 import { useRouter } from "next/navigation";
 
-export default function Landing() {
+export default function Home() {
   const router = useRouter();
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
-      <nav className="flex justify-between items-center px-8 py-4 border-b border-gray-800">
+      <nav className="flex justify-between items-center px-8 py-5 max-w-6xl mx-auto">
         <div className="flex items-center gap-2">
-          <span className="text-2xl">⚡</span>
-          <span className="text-xl font-bold text-cyan-400">TokenSave</span>
+          <div className="w-8 h-8 bg-cyan-400 rounded-lg flex items-center justify-center text-gray-950 font-bold text-sm">TS</div>
+          <span className="text-xl font-bold">TokenSave</span>
         </div>
-        <div className="flex gap-4">
+        <div className="flex gap-4 items-center">
           <button onClick={() => router.push("/login")} className="px-4 py-2 text-gray-400 hover:text-white text-sm">Sign In</button>
-          <button onClick={() => router.push("/login")} className="px-4 py-2 bg-cyan-400 text-gray-950 rounded-lg text-sm font-semibold hover:bg-cyan-300">Start Free Trial</button>
+          <button onClick={() => router.push("/login")} className="px-5 py-2 bg-cyan-400 text-gray-950 rounded-lg text-sm font-semibold hover:bg-cyan-300">Start Free Trial</button>
         </div>
       </nav>
 
-      <div className="max-w-4xl mx-auto px-8 py-20 text-center">
-        <div className="inline-block px-4 py-1 bg-cyan-400/10 text-cyan-400 rounded-full text-sm mb-6">Save 50-60% on AI API costs</div>
-        <h1 className="text-5xl font-bold mb-6 leading-tight">Stop overpaying for<br /><span className="text-cyan-400">AI API calls</span></h1>
-        <p className="text-gray-400 text-lg mb-8 max-w-2xl mx-auto">TokenSave sits between your app and AI providers like Claude, GPT, and Gemini. We automatically cache, route, and compress every request to cut your bill by 50-60%.</p>
-        <div className="flex gap-4 justify-center mb-16">
-          <button onClick={() => router.push("/login")} className="px-8 py-3 bg-cyan-400 text-gray-950 rounded-lg font-semibold hover:bg-cyan-300 text-lg">Start 14-Day Free Trial</button>
-          <button onClick={() => router.push("/playground")} className="px-8 py-3 border border-gray-700 text-gray-300 rounded-lg hover:bg-gray-800 text-lg">Try Playground</button>
+      <div className="max-w-6xl mx-auto px-8 pt-16 pb-20">
+        <div className="text-center max-w-3xl mx-auto">
+          <div className="inline-block px-4 py-1.5 bg-cyan-400/10 text-cyan-400 rounded-full text-sm font-medium mb-6 border border-cyan-400/20">Trusted by developer teams worldwide</div>
+          <h1 className="text-5xl font-bold mb-6 leading-tight tracking-tight">Reduce your AI API costs <br /><span className="text-cyan-400">by 50-60%</span></h1>
+          <p className="text-gray-400 text-lg mb-10 max-w-2xl mx-auto leading-relaxed">TokenSave is an intelligent middleware layer that sits between your application and AI providers. We optimize every request through caching, smart routing, and prompt compression.</p>
+          <div className="flex gap-4 justify-center mb-6">
+            <button onClick={() => router.push("/login")} className="px-8 py-3.5 bg-cyan-400 text-gray-950 rounded-lg font-semibold hover:bg-cyan-300 text-base">Start 14-Day Free Trial</button>
+            <button onClick={() => router.push("/playground")} className="px-8 py-3.5 border border-gray-700 text-gray-300 rounded-lg hover:bg-gray-900 text-base">Live Demo</button>
+          </div>
+          <p className="text-gray-600 text-sm">No credit card required. Set up in under 2 minutes.</p>
         </div>
 
-        <div className="grid grid-cols-3 gap-6 mb-20">
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 text-left">
-            <span className="text-3xl mb-3 block">💾</span>
-            <h3 className="font-semibold text-lg mb-2">Smart Cache</h3>
-            <p className="text-gray-400 text-sm">Similar query asked before? We return the cached answer instantly. Zero API cost, zero latency.</p>
+        <div className="mt-20 mb-20">
+          <div className="text-center mb-12">
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">How it works</h2>
           </div>
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 text-left">
-            <span className="text-3xl mb-3 block">🔀</span>
-            <h3 className="font-semibold text-lg mb-2">Model Router</h3>
-            <p className="text-gray-400 text-sm">Simple questions go to cheap models. Complex tasks go to powerful ones. You save money without losing quality.</p>
-          </div>
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 text-left">
-            <span className="text-3xl mb-3 block">✂️</span>
-            <h3 className="font-semibold text-lg mb-2">Prompt Compressor</h3>
-            <p className="text-gray-400 text-sm">We strip filler words and redundancy from every prompt. Same meaning, fewer tokens, lower cost.</p>
+          <div className="grid grid-cols-3 gap-8">
+            <div className="text-center">
+              <div className="w-10 h-10 bg-cyan-400/10 border border-cyan-400/20 rounded-full flex items-center justify-center text-cyan-400 font-bold mx-auto mb-4">1</div>
+              <h3 className="font-semibold mb-2">Connect your API keys</h3>
+              <p className="text-gray-500 text-sm leading-relaxed">Add your Claude, GPT, or Gemini API keys to your TokenSave dashboard. Takes 30 seconds.</p>
+            </div>
+            <div className="text-center">
+              <div className="w-10 h-10 bg-cyan-400/10 border border-cyan-400/20 rounded-full flex items-center justify-center text-cyan-400 font-bold mx-auto mb-4">2</div>
+              <h3 className="font-semibold mb-2">Replace one URL</h3>
+              <p className="text-gray-500 text-sm leading-relaxed">Swap your AI provider endpoint with your TokenSave proxy URL. One line of code.</p>
+            </div>
+            <div className="text-center">
+              <div className="w-10 h-10 bg-cyan-400/10 border border-cyan-400/20 rounded-full flex items-center justify-center text-cyan-400 font-bold mx-auto mb-4">3</div>
+              <h3 className="font-semibold mb-2">Watch your costs drop</h3>
+              <p className="text-gray-500 text-sm leading-relaxed">Every request is automatically cached, routed, and compressed. See savings in real-time.</p>
+            </div>
           </div>
         </div>
 
         <div className="mb-20">
-          <h2 className="text-3xl font-bold mb-10">Simple pricing</h2>
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-bold mb-4">Three engines working together</h2>
+            <p className="text-gray-500 max-w-xl mx-auto">Each request passes through our optimization pipeline before reaching the AI provider.</p>
+          </div>
           <div className="grid grid-cols-3 gap-6">
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-              <h3 className="font-semibold text-lg mb-1">Starter</h3>
-              <p className="text-3xl font-bold text-cyan-400 mb-1"><span className="text-sm text-gray-500">/mo</span></p>
-              <p className="text-gray-500 text-sm mb-4">For small startups</p>
-              <ul className="text-sm text-gray-400 space-y-2 text-left">
-                <li>✓ Up to 50K requests/mo</li>
-                <li>✓ Smart caching</li>
-                <li>✓ Model routing</li>
-                <li>✓ Basic dashboard</li>
-              </ul>
-            </div>
-            <div className="bg-gray-900 border-2 border-cyan-400 rounded-xl p-6 relative">
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-cyan-400 text-gray-950 text-xs font-bold px-3 py-1 rounded-full">POPULAR</div>
-              <h3 className="font-semibold text-lg mb-1">Growth</h3>
-              <p className="text-3xl font-bold text-cyan-400 mb-1"><span className="text-sm text-gray-500">/mo</span></p>
-              <p className="text-gray-500 text-sm mb-4">For growing teams</p>
-              <ul className="text-sm text-gray-400 space-y-2 text-left">
-                <li>✓ Up to 500K requests/mo</li>
-                <li>✓ Everything in Starter</li>
-                <li>✓ Prompt compression</li>
-                <li>✓ Team management</li>
-                <li>✓ Priority support</li>
-              </ul>
+              <div className="w-10 h-10 bg-green-400/10 rounded-lg flex items-center justify-center text-green-400 text-lg mb-4">C</div>
+              <h3 className="font-semibold text-lg mb-2">Semantic Cache</h3>
+              <p className="text-gray-400 text-sm leading-relaxed">If a similar query was answered before, we return the cached response instantly. Zero API cost, zero latency, same quality.</p>
+              <div className="mt-4 pt-4 border-t border-gray-800">
+                <p className="text-green-400 text-sm font-medium">Saves up to 100% on repeated queries</p>
+              </div>
             </div>
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-              <h3 className="font-semibold text-lg mb-1">Enterprise</h3>
-              <p className="text-3xl font-bold text-cyan-400 mb-1">Custom</p>
-              <p className="text-gray-500 text-sm mb-4">For large companies</p>
-              <ul className="text-sm text-gray-400 space-y-2 text-left">
-                <li>✓ Unlimited requests</li>
-                <li>✓ Everything in Growth</li>
-                <li>✓ Custom routing rules</li>
-                <li>✓ Dedicated support</li>
-                <li>✓ SLA guarantee</li>
-              </ul>
+              <div className="w-10 h-10 bg-blue-400/10 rounded-lg flex items-center justify-center text-blue-400 text-lg mb-4">R</div>
+              <h3 className="font-semibold text-lg mb-2">Model Router</h3>
+              <p className="text-gray-400 text-sm leading-relaxed">Simple tasks like Q&A route to cost-efficient models. Complex tasks like coding route to powerful models. Automatic.</p>
+              <div className="mt-4 pt-4 border-t border-gray-800">
+                <p className="text-blue-400 text-sm font-medium">Saves 60-80% on simple tasks</p>
+              </div>
+            </div>
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+              <div className="w-10 h-10 bg-purple-400/10 rounded-lg flex items-center justify-center text-purple-400 text-lg mb-4">P</div>
+              <h3 className="font-semibold text-lg mb-2">Prompt Compressor</h3>
+              <p className="text-gray-400 text-sm leading-relaxed">We remove redundant words and whitespace from every prompt. Same meaning, fewer tokens, lower cost per request.</p>
+              <div className="mt-4 pt-4 border-t border-gray-800">
+                <p className="text-purple-400 text-sm font-medium">Saves 10-30% per request</p>
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-10">
-          <h2 className="text-2xl font-bold mb-3">Ready to cut your AI costs?</h2>
-          <p className="text-gray-400 mb-6">Start your free 14-day trial. No credit card required.</p>
-          <button onClick={() => router.push("/login")} className="px-8 py-3 bg-cyan-400 text-gray-950 rounded-lg font-semibold hover:bg-cyan-300 text-lg">Get Started Free</button>
+        <div className="mb-20 bg-gray-900 border border-gray-800 rounded-2xl p-8">
+          <div className="text-center mb-6">
+            <h2 className="text-2xl font-bold mb-2">Simple integration</h2>
+            <p className="text-gray-500">Replace one URL in your existing code. Everything else stays the same.</p>
+          </div>
+          <div className="bg-gray-950 rounded-xl p-6 font-mono text-sm">
+            <p className="text-gray-500 mb-1">// Before (calling AI directly)</p>
+            <p className="text-red-400/70 mb-3">{"fetch(\"https://api.anthropic.com/v1/messages\", { ... })"}</p>
+            <p className="text-gray-500 mb-1">// After (through TokenSave)</p>
+            <p className="text-green-400">{"fetch(\"https://tokensave.vercel.app/api/proxy\", { ... })"}</p>
+          </div>
+        </div>
+
+        <div className="mb-20">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-bold mb-4">Pricing</h2>
+            <p className="text-gray-500">Start free. Scale as you grow.</p>
+          </div>
+          <div className="grid grid-cols-3 gap-6">
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-8">
+              <h3 className="font-semibold text-lg mb-1">Starter</h3>
+              <div className="mb-1"><span className="text-4xl font-bold">$99</span><span className="text-gray-500">/mo</span></div>
+              <p className="text-gray-500 text-sm mb-6">For small startups</p>
+              <div className="space-y-3 text-sm text-gray-400">
+                <p>Up to 50,000 requests/mo</p>
+                <p>Smart caching</p>
+                <p>Model routing</p>
+                <p>Basic analytics dashboard</p>
+              </div>
+            </div>
+            <div className="bg-gray-900 border-2 border-cyan-400 rounded-xl p-8 relative">
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-cyan-400 text-gray-950 text-xs font-bold px-3 py-1 rounded-full">MOST POPULAR</div>
+              <h3 className="font-semibold text-lg mb-1">Growth</h3>
+              <div className="mb-1"><span className="text-4xl font-bold">$499</span><span className="text-gray-500">/mo</span></div>
+              <p className="text-gray-500 text-sm mb-6">For growing teams</p>
+              <div className="space-y-3 text-sm text-gray-400">
+                <p>Up to 500,000 requests/mo</p>
+                <p>Everything in Starter</p>
+                <p>Prompt compression</p>
+                <p>Team management</p>
+                <p>Priority support</p>
+              </div>
+            </div>
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-8">
+              <h3 className="font-semibold text-lg mb-1">Enterprise</h3>
+              <div className="mb-1"><span className="text-4xl font-bold">Custom</span></div>
+              <p className="text-gray-500 text-sm mb-6">For large organizations</p>
+              <div className="space-y-3 text-sm text-gray-400">
+                <p>Unlimited requests</p>
+                <p>Everything in Growth</p>
+                <p>Custom routing rules</p>
+                <p>Dedicated account manager</p>
+                <p>SLA guarantee</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="text-center py-16 bg-gray-900 border border-gray-800 rounded-2xl">
+          <h2 className="text-3xl font-bold mb-4">Start saving today</h2>
+          <p className="text-gray-400 mb-8 max-w-md mx-auto">14-day free trial. No credit card required. Set up in under 2 minutes.</p>
+          <button onClick={() => router.push("/login")} className="px-8 py-3.5 bg-cyan-400 text-gray-950 rounded-lg font-semibold hover:bg-cyan-300 text-base">Get Started Free</button>
         </div>
       </div>
 
-      <footer className="border-t border-gray-800 px-8 py-6 text-center text-gray-500 text-sm mt-20">© 2026 TokenSave. All rights reserved.</footer>
+      <footer className="border-t border-gray-800 max-w-6xl mx-auto px-8 py-8 flex justify-between items-center text-gray-600 text-sm">
+        <p>© 2026 TokenSave. All rights reserved.</p>
+        <div className="flex gap-6">
+          <a href="#" className="hover:text-gray-400">Privacy</a>
+          <a href="#" className="hover:text-gray-400">Terms</a>
+          <a href="#" className="hover:text-gray-400">Documentation</a>
+        </div>
+      </footer>
     </div>
   );
 }
