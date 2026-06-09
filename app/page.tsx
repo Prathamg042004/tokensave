@@ -97,6 +97,32 @@ export default function Home() {
             <p className="text-green-400">{"fetch(\"https://tokensave.vercel.app/api/proxy\", { ... })"}</p>
           </div>
         </div>
+        <div className="mb-16 md:mb-20 bg-gray-900 border border-gray-800 rounded-2xl p-6 md:p-8">
+          <div className="text-center mb-8">
+            <h2 className="text-2xl font-bold mb-2">Your keys. Your control.</h2>
+            <p className="text-gray-500">Three ways to integrate — you choose your security level.</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-gray-950 border border-green-400/20 rounded-xl p-5 text-center">
+              <div className="text-green-400 text-xs font-semibold uppercase tracking-wider mb-3">Most secure</div>
+              <h3 className="font-semibold text-lg mb-2">SDK</h3>
+              <p className="text-gray-400 text-sm mb-3">Keys never leave your server. All optimization runs locally in your code.</p>
+              <a href="/docs" className="text-green-400 text-sm hover:underline">View SDK docs</a>
+            </div>
+            <div className="bg-gray-950 border border-cyan-400/20 rounded-xl p-5 text-center">
+              <div className="text-cyan-400 text-xs font-semibold uppercase tracking-wider mb-3">Full control</div>
+              <h3 className="font-semibold text-lg mb-2">Self-hosted</h3>
+              <p className="text-gray-400 text-sm mb-3">Run on your own servers. Audit every line of open source code.</p>
+              <a href="https://github.com/Prathamg042004/tokensave" className="text-cyan-400 text-sm hover:underline">View on GitHub</a>
+            </div>
+            <div className="bg-gray-950 border border-amber-400/20 rounded-xl p-5 text-center">
+              <div className="text-amber-400 text-xs font-semibold uppercase tracking-wider mb-3">Fastest setup</div>
+              <h3 className="font-semibold text-lg mb-2">Cloud proxy</h3>
+              <p className="text-gray-400 text-sm mb-3">One URL swap. Keys forwarded to provider, never stored by us.</p>
+              <a href="/security" className="text-amber-400 text-sm hover:underline">Read security policy</a>
+            </div>
+          </div>
+        </div>
 
         <div className="mb-16 md:mb-20">
           <div className="text-center mb-10 md:mb-12">
@@ -157,6 +183,8 @@ export default function Home() {
         <p>© 2026 TokenSave. All rights reserved.</p>
         <div className="flex gap-6">
           <a href="/docs" className="hover:text-gray-400">Documentation</a>
+          <a href="/security" className="hover:text-gray-400">Security</a>
+          <a href="https://github.com/Prathamg042004/tokensave" className="hover:text-gray-400">GitHub</a>
           <a href="mailto:prathamg200404@gmail.com" className="hover:text-gray-400">Contact</a>
         </div>
       </footer>
