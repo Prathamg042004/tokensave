@@ -108,7 +108,7 @@ export default function Playground() {
       const res = await fetch("/api/proxy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider, apiKey, messages: newMessages }),
+        body: JSON.stringify({ provider, apiKey, messages: newMessages.map(m => ({ role: m.role, content: m.content })) }),
       });
       const data = await res.json();
       const text = extractAIText(data, provider);
