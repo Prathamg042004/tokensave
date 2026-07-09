@@ -1,5 +1,5 @@
 ﻿"use client";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 
 function extractAIText(response: any, provider: string): string {
   try {
@@ -70,6 +70,45 @@ export default function Playground() {
   const [compareResults, setCompareResults] = useState<any>(null);
 
   const [isDemo, setIsDemo] = useState(false);
+  const [fileContent, setFileContent] = useState("");
+const [fileName, setFileName] = useState("");
+const fileInputRef = useRef<HTMLInputElement>(null);
+
+const handleFileUpload = (e: any) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  setFileName(file.name);
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    const text = event.target?.result as string;
+    if (text.length > 50000) {
+      setFileContent(text.slice(0, 50000));
+      alert("File truncated to 50,000 characters to fit within token limits.");
+    } else {
+      setFileContent(text);
+    }
+  };
+  if (file.name.endsWith(".pdf")) {
+    setFileContent("[PDF files are read as text. For best results, copy-paste the text content directly.]");
+    setFileName(file.name + " (text only)");
+  } else {
+    reader.readAsText(file);
+  }
+};
+
+const removeFile = () => { setFileContent(""); setFileName(""); if (fileInputRef.current) fileInputRef.current.value = ""; };
+
+const copyResponse = (text: string) => { navigator.clipboard.writeText(text); };
+
+const downloadResponse = (text: string, name: string) => {
+  const blob = new Blob([text], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name + ".txt";
+  a.click();
+  URL.revokeObjectURL(url);
+};
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chatMessages]);
 
@@ -81,7 +120,7 @@ export default function Playground() {
       const res = await fetch("/api/proxy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider, apiKey, messages: [{ role: "user", content: prompt }] }),
+        body: JSON.stringify({ provider, apiKey, messages: [{ role: "user", content: fileContent ? prompt + "\n\n--- Attached File: " + fileName + " ---\n" + fileContent : prompt }] }),
       });
       const data = await res.json();
       const duration = Date.now() - start;
@@ -100,7 +139,8 @@ export default function Playground() {
 
   const sendChat = async () => {
     if (!chatInput.trim()) return;
-    const newMessages = [...chatMessages, { role: "user", content: chatInput }];
+    const content = fileContent ? chatInput + "\n\n--- Attached File: " + fileName + " ---\n" + fileContent : chatInput;
+const newMessages = [...chatMessages, { role: "user", content }];
     setChatMessages(newMessages);
     setChatInput("");
     setChatLoading(true);
@@ -201,9 +241,19 @@ export default function Playground() {
                 ))}
               </div>
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-                <textarea placeholder="Type your prompt or select a template above..." value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={6} className="w-full bg-transparent text-gray-200 placeholder-gray-600 text-sm resize-none focus:outline-none" />
-                <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-800">
-                  <span className="text-xs text-gray-600">{estimateTokens(prompt)} est. tokens</span>
+              <textarea placeholder="Type your prompt or select a template above..." value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={5} className="w-full bg-transparent text-gray-200 placeholder-gray-600 text-sm resize-none focus:outline-none" />
+{fileName && (
+  <div className="flex items-center gap-2 mt-2 px-3 py-2 bg-cyan-400/5 border border-cyan-400/20 rounded-lg">
+    <span className="text-cyan-400 text-xs">📎</span>
+    <span className="text-cyan-400 text-xs flex-1 truncate">{fileName} ({Math.round(fileContent.length / 1024)}KB)</span>
+    <button onClick={removeFile} className="text-gray-500 hover:text-red-400 text-xs">Remove</button>
+  </div>
+)}                <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-800">
+<div className="flex items-center gap-3">
+  <span className="text-xs text-gray-600">{estimateTokens(prompt + fileContent)} est. tokens</span>
+  <input ref={fileInputRef} type="file" accept=".txt,.csv,.json,.md,.html,.xml,.log" onChange={handleFileUpload} className="hidden" />
+  <button onClick={() => fileInputRef.current?.click()} className="text-xs text-gray-500 hover:text-cyan-400 transition-colors flex items-center gap-1">📎 Attach file</button>
+</div>
                   <button onClick={sendSingle} disabled={loading || !apiKey || !prompt} className="px-6 py-2 bg-cyan-400 text-gray-950 font-semibold rounded-lg hover:bg-cyan-300 transition-colors disabled:opacity-40 text-sm flex items-center gap-2">
                     {loading ? <><div className="w-3 h-3 border-2 border-gray-950 border-t-transparent rounded-full animate-spin"></div>Processing...</> : "Send"}
                   </button>
@@ -255,8 +305,14 @@ export default function Playground() {
                 </div>
               )}
               {result?.text && !result.text.startsWith("QUOTA_") && !result.text.startsWith("AUTH_") && (
-                <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-                  <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Response</p>
+  <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+    <div className="flex justify-between items-center mb-2">
+      <p className="text-xs text-gray-500 uppercase tracking-wider">Response</p>
+      <div className="flex gap-2">
+        <button onClick={() => copyResponse(result.text)} className="text-xs text-gray-500 hover:text-cyan-400 transition-colors">Copy</button>
+        <button onClick={() => downloadResponse(result.text, "tokensave-response")} className="text-xs text-gray-500 hover:text-cyan-400 transition-colors">Download</button>
+      </div>
+    </div>
                   <div className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{result.text}</div>
                 </div>
               )}

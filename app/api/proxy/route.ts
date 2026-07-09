@@ -130,13 +130,49 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid provider. Use: anthropic, openai, or google" }, { status: 400 });
     }
 
-    const aiResponse = await fetch(apiUrl, {
+    let aiResponse = await fetch(apiUrl, {
       method: "POST",
       headers,
       body: JSON.stringify(apiBody),
     });
-
-    const aiData = await aiResponse.json();
+    
+    let aiData = await aiResponse.json();
+    let usedFallback = false;
+    let fallbackProvider = "";
+    
+    // Fallback: if the provider fails and Groq is available as backup
+    if (aiResponse.status >= 400 && provider !== "groq") {
+      try {
+        const fallbackUrl = "https://api.groq.com/openai/v1/chat/completions";
+        const fallbackModel = complexity === "simple" ? "llama-3.1-8b-instant" : "llama-3.3-70b-versatile";
+        // Only fallback if the user hasn't provided a Groq key — skip fallback for now
+        // This is a placeholder for when we add server-side fallback keys
+        usedFallback = false;
+      } catch (e) {
+        // Fallback failed too, return original error
+      }
+    }let aiResponse = await fetch(apiUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(apiBody),
+    });
+    
+    let aiData = await aiResponse.json();
+    let usedFallback = false;
+    let fallbackProvider = "";
+    
+    // Fallback: if the provider fails and Groq is available as backup
+    if (aiResponse.status >= 400 && provider !== "groq") {
+      try {
+        const fallbackUrl = "https://api.groq.com/openai/v1/chat/completions";
+        const fallbackModel = complexity === "simple" ? "llama-3.1-8b-instant" : "llama-3.3-70b-versatile";
+        // Only fallback if the user hasn't provided a Groq key — skip fallback for now
+        // This is a placeholder for when we add server-side fallback keys
+        usedFallback = false;
+      } catch (e) {
+        // Fallback failed too, return original error
+      }
+    }
 
     // Step 5: Check if the AI provider returned an error
     const hasError = aiData.error || (aiResponse.status >= 400);
@@ -150,7 +186,9 @@ export async function POST(req: NextRequest) {
           model_used: model,
           complexity,
           chars_saved: savedChars,
-          method: complexity === "simple" ? "routed_to_cheap" : "routed_to_smart",
+          method: complexity === "simple" ? "routed_to_cheap" : "routed_to_smart",   
+           fallback_used: usedFallback,
+           fallback_provider: fallbackProvider || undefined,
           note: "Error came from " + provider + ", not TokenSave. Check your API key and account limits.",
         },
       }, { status: aiResponse.status });
