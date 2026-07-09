@@ -12,6 +12,7 @@ function extractAIText(response: any, provider: string): string {
     if (provider === "google") {
       if (response.candidates && response.candidates[0]) return response.candidates[0].content.parts[0].text;
     }
+    if (provider === "groq" && response.choices && response.choices[0]) return response.choices[0].message.content;
     if (response.error) return "Error: " + (response.error.message || response.error);
   } catch (e) {}
   return "";
@@ -94,6 +95,7 @@ export default function Playground() {
                     <option value="anthropic">Anthropic (Claude)</option>
                     <option value="openai">OpenAI (GPT)</option>
                     <option value="google">Google (Gemini)</option>
+                    <option value="groq">Groq — Llama (Free & Fast)</option>
                   </select>
                 </div>
                 <div>

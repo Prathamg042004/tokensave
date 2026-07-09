@@ -49,7 +49,8 @@ function detectComplexity(messages: any[]): "simple" | "complex" {
 function pickModel(complexity: "simple" | "complex", provider: string): string {
   if (provider === "anthropic") return complexity === "simple" ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6";
   if (provider === "openai") return complexity === "simple" ? "gpt-4o-mini" : "gpt-4o";
-  return complexity === "simple" ? "gemini-2.0-flash-lite" : "gemini-2.0-flash";
+  if (provider === "groq") return complexity === "simple" ? "llama-3.1-8b-instant" : "llama-3.3-70b-versatile";
+return complexity === "simple" ? "gemini-2.0-flash-lite" : "gemini-2.0-flash";
 }
 
 function compressPrompt(text: string): { compressed: string; savedChars: number } {
@@ -121,7 +122,11 @@ export async function POST(req: NextRequest) {
     } else if (provider === "google") {
       apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + apiKey;
       apiBody = { contents: optimizedMessages.map((m: any) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })) };
-    } else {
+    } else if (provider === "groq") {
+      apiUrl = "https://api.groq.com/openai/v1/chat/completions";
+      headers["Authorization"] = "Bearer " + apiKey;
+      apiBody = { model, messages: optimizedMessages };
+    }else {
       return NextResponse.json({ error: "Invalid provider. Use: anthropic, openai, or google" }, { status: 400 });
     }
 

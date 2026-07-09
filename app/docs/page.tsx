@@ -67,7 +67,7 @@ export default function Docs() {
                       <td className="px-4 py-3 font-mono text-cyan-400">provider</td>
                       <td className="px-4 py-3 text-gray-500">string</td>
                       <td className="px-4 py-3 text-gray-500">Yes</td>
-                      <td className="px-4 py-3 text-gray-400">&quot;anthropic&quot;, &quot;openai&quot;, or &quot;google&quot;</td>
+                      <td className="px-4 py-3 text-gray-400">&quot;anthropic&quot;, &quot;openai&quot;, &quot;google&quot;, or &quot;groq&quot;</td>
                     </tr>
                     <tr className="border-b border-gray-800/50">
                       <td className="px-4 py-3 font-mono text-cyan-400">apiKey</td>
@@ -201,6 +201,11 @@ print(response.json())`}</pre>
                         <td className="px-4 py-3">Google</td>
                         <td className="px-4 py-3 font-mono text-green-400 text-xs">gemini-2.0-flash-lite</td>
                         <td className="px-4 py-3 font-mono text-cyan-400 text-xs">gemini-2.0-flash</td>
+                      </tr>
+                      <tr>
+                        <td className="px-4 py-3">Groq</td>
+                        <td className="px-4 py-3 font-mono text-green-400 text-xs">llama-3.1-8b-instant</td>
+                        <td className="px-4 py-3 font-mono text-cyan-400 text-xs">llama-3.3-70b-versatile</td>
                       </tr>
                     </tbody>
                   </table>
