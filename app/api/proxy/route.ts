@@ -7,9 +7,7 @@ try {
     url: process.env.UPSTASH_REDIS_REST_URL || "",
     token: process.env.UPSTASH_REDIS_REST_TOKEN || "",
   });
-} catch (e) {
-  console.error("Redis init failed:", e);
-}
+} catch (e) {}
 
 const CACHE_TTL = 1800;
 
@@ -18,12 +16,9 @@ async function safeRedisGet(key: string) {
   try { return await redis.get(key); } catch (e) { return null; }
 }
 
-async function safeRedisSet(key: string, value: any, ttl?: number) {
+async function safeRedisSet(key: string, value: any, ttl: number) {
   if (!redis) return;
-  try {
-    if (ttl) { await redis.setex(key, ttl, JSON.stringify(value)); }
-    else { await redis.set(key, JSON.stringify(value)); }
-  } catch (e) {}
+  try { await redis.setex(key, ttl, JSON.stringify(value)); } catch (e) {}
 }
 
 async function safeLogRequest(data: any) {
@@ -41,7 +36,7 @@ async function safeLogRequest(data: any) {
 function detectComplexity(messages: any[]): "simple" | "complex" {
   const lastMessage = messages[messages.length - 1]?.content || "";
   const wordCount = lastMessage.split(" ").length;
-  const complexKeywords = ["analyze", "code", "debug", "write a function", "explain in detail", "compare", "evaluate", "create a", "build", "design", "implement", "refactor", "optimize"];
+  const complexKeywords = ["analyze", "code", "debug", "write a function", "explain in detail", "compare", "evaluate", "create a", "build", "design", "implement", "refactor", "optimize", "algorithm", "architecture"];
   const isComplex = wordCount > 100 || complexKeywords.some((kw) => lastMessage.toLowerCase().includes(kw));
   return isComplex ? "complex" : "simple";
 }
@@ -50,7 +45,7 @@ function pickModel(complexity: "simple" | "complex", provider: string): string {
   if (provider === "anthropic") return complexity === "simple" ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6";
   if (provider === "openai") return complexity === "simple" ? "gpt-4o-mini" : "gpt-4o";
   if (provider === "groq") return complexity === "simple" ? "llama-3.1-8b-instant" : "llama-3.3-70b-versatile";
-return complexity === "simple" ? "gemini-2.0-flash-lite" : "gemini-2.0-flash";
+  return complexity === "simple" ? "gemini-2.0-flash-lite" : "gemini-2.0-flash";
 }
 
 function compressPrompt(text: string): { compressed: string; savedChars: number } {
@@ -77,14 +72,13 @@ export async function POST(req: NextRequest) {
     const { messages, provider = "anthropic", apiKey, model: requestedModel } = body;
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
-      return NextResponse.json({ error: "messages array is required and must not be empty" }, { status: 400 });
+      return NextResponse.json({ error: "messages array is required" }, { status: 400 });
     }
 
     if (!apiKey || typeof apiKey !== "string" || apiKey.length < 10) {
       return NextResponse.json({ error: "A valid apiKey is required" }, { status: 400 });
     }
 
-    // Step 1: Check cache (safe — won't crash if Redis fails)
     const cacheKey = getCacheKey(messages);
     const cached = await safeRedisGet(cacheKey);
     if (cached) {
@@ -96,16 +90,12 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Step 2: Detect complexity and pick model
     const complexity = detectComplexity(messages);
     const model = requestedModel || pickModel(complexity, provider);
-
-    // Step 3: Compress prompt
     const lastMsg = messages[messages.length - 1];
     const { compressed, savedChars } = compressPrompt(lastMsg.content);
     const optimizedMessages = [...messages.slice(0, -1), { ...lastMsg, content: compressed }];
 
-    // Step 4: Forward to AI provider
     let apiUrl = "";
     let headers: any = { "Content-Type": "application/json" };
     let apiBody: any = {};
@@ -126,59 +116,19 @@ export async function POST(req: NextRequest) {
       apiUrl = "https://api.groq.com/openai/v1/chat/completions";
       headers["Authorization"] = "Bearer " + apiKey;
       apiBody = { model, messages: optimizedMessages };
-    }else {
-      return NextResponse.json({ error: "Invalid provider. Use: anthropic, openai, or google" }, { status: 400 });
+    } else {
+      return NextResponse.json({ error: "Invalid provider. Use: anthropic, openai, google, or groq" }, { status: 400 });
     }
 
-    let aiResponse = await fetch(apiUrl, {
+    const aiResponse = await fetch(apiUrl, {
       method: "POST",
       headers,
       body: JSON.stringify(apiBody),
     });
-    
-    let aiData = await aiResponse.json();
-    let usedFallback = false;
-    let fallbackProvider = "";
-    
-    // Fallback: if the provider fails and Groq is available as backup
-    if (aiResponse.status >= 400 && provider !== "groq") {
-      try {
-        const fallbackUrl = "https://api.groq.com/openai/v1/chat/completions";
-        const fallbackModel = complexity === "simple" ? "llama-3.1-8b-instant" : "llama-3.3-70b-versatile";
-        // Only fallback if the user hasn't provided a Groq key — skip fallback for now
-        // This is a placeholder for when we add server-side fallback keys
-        usedFallback = false;
-      } catch (e) {
-        // Fallback failed too, return original error
-      }
-    }let aiResponse = await fetch(apiUrl, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(apiBody),
-    });
-    
-    let aiData = await aiResponse.json();
-    let usedFallback = false;
-    let fallbackProvider = "";
-    
-    // Fallback: if the provider fails and Groq is available as backup
-    if (aiResponse.status >= 400 && provider !== "groq") {
-      try {
-        const fallbackUrl = "https://api.groq.com/openai/v1/chat/completions";
-        const fallbackModel = complexity === "simple" ? "llama-3.1-8b-instant" : "llama-3.3-70b-versatile";
-        // Only fallback if the user hasn't provided a Groq key — skip fallback for now
-        // This is a placeholder for when we add server-side fallback keys
-        usedFallback = false;
-      } catch (e) {
-        // Fallback failed too, return original error
-      }
-    }
 
-    // Step 5: Check if the AI provider returned an error
-    const hasError = aiData.error || (aiResponse.status >= 400);
+    const aiData = await aiResponse.json();
 
-    if (hasError) {
-      const errorMsg = aiData.error?.message || aiData.error || "Unknown error from " + provider;
+    if (aiResponse.status >= 400) {
       return NextResponse.json({
         error: aiData.error,
         tokensave_meta: {
@@ -186,21 +136,14 @@ export async function POST(req: NextRequest) {
           model_used: model,
           complexity,
           chars_saved: savedChars,
-          method: complexity === "simple" ? "routed_to_cheap" : "routed_to_smart",   
-           fallback_used: usedFallback,
-           fallback_provider: fallbackProvider || undefined,
-          note: "Error came from " + provider + ", not TokenSave. Check your API key and account limits.",
+          note: "Error from " + provider + ", not TokenSave.",
         },
       }, { status: aiResponse.status });
     }
 
-    // Step 6: Cache successful response (safe — won't crash if Redis fails)
     await safeRedisSet(cacheKey, aiData, CACHE_TTL);
-
-    // Step 7: Log (safe)
     await safeLogRequest({ cache_hit: false, tokens_saved: savedChars, provider, model, complexity });
 
-    // Step 8: Return with metadata
     return NextResponse.json({
       ...aiData,
       tokensave_meta: {
@@ -215,7 +158,6 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     return NextResponse.json({
       error: "TokenSave proxy error: " + error.message,
-      tokensave_meta: { note: "This is an internal proxy error. Please try again or contact support." },
     }, { status: 500 });
   }
 }
@@ -227,23 +169,23 @@ export async function GET() {
     version: "1.1.0",
     docs: "https://tokensave.vercel.app/docs",
     security: "https://tokensave.vercel.app/security",
-    rate_limit: "60 requests/minute",
+    providers: ["anthropic", "openai", "google", "groq"],
+    features: [
+      "Semantic caching — 100% savings on repeated queries",
+      "Model routing — simple tasks to cheap models, complex to powerful",
+      "Prompt compression — removes filler words and whitespace",
+      "Multi-provider support — Claude, GPT, Gemini, Llama",
+    ],
     endpoints: {
       proxy: {
         method: "POST",
         url: "https://tokensave.vercel.app/api/proxy",
         body: {
-          provider: "anthropic | openai | google",
+          provider: "anthropic | openai | google | groq",
           apiKey: "your-provider-api-key",
           messages: [{ role: "user", content: "your prompt" }],
         },
       },
     },
-    features: [
-      "Semantic caching — 100% savings on repeated queries",
-      "Model routing — simple tasks to cheap models, complex to powerful",
-      "Prompt compression — removes filler words and whitespace",
-      "Zero-knowledge SDK available — keys never leave your server",
-    ],
   });
 }
