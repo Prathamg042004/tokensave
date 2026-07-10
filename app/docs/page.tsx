@@ -279,7 +279,39 @@ print(response.json())`}</pre>
               </table>
             </div>
           </section>
+          <section>
+            <h2 className="text-xl font-semibold mb-4 pb-2 border-b border-gray-800">POST /api/batch</h2>
+            <p className="text-gray-400 text-sm mb-4">Process multiple prompts in a single request. Maximum 50 prompts per batch.</p>
+            <pre className="bg-gray-900 border border-gray-800 rounded-xl p-4 text-sm text-gray-400 overflow-x-auto mb-4">{`curl -X POST https://tokensave.vercel.app/api/batch \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "provider": "groq",
+    "apiKey": "your-key",
+    "prompts": [
+      "What is 2+2?",
+      "Capital of France?",
+      "Translate hello to Spanish"
+    ]
+  }'`}</pre>
+            <p className="text-gray-400 text-sm">Response includes batch_id, success count, cache hits, processing time, and individual results for each prompt.</p>
+          </section>
 
+          <section>
+            <h2 className="text-xl font-semibold mb-4 pb-2 border-b border-gray-800">POST /api/trim-context</h2>
+            <p className="text-gray-400 text-sm mb-4">Automatically trim old messages from long conversations to fit within token limits.</p>
+            <pre className="bg-gray-900 border border-gray-800 rounded-xl p-4 text-sm text-gray-400 overflow-x-auto mb-4">{`curl -X POST https://tokensave.vercel.app/api/trim-context \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "maxTokens": 4000,
+    "messages": [
+      {"role": "system", "content": "You are helpful."},
+      {"role": "user", "content": "old message 1"},
+      {"role": "assistant", "content": "old reply 1"},
+      {"role": "user", "content": "latest question"}
+    ]
+  }'`}</pre>
+            <p className="text-gray-400 text-sm">Keeps system messages and the latest user message. Removes oldest conversation messages first until within the token limit.</p>
+          </section>
           <section className="pb-8">
             <h2 className="text-xl font-semibold mb-4 pb-2 border-b border-gray-800">Support</h2>
             <p className="text-gray-400 text-sm">Questions or issues? Email <a href="mailto:prathamg200404@gmail.com" className="text-cyan-400 hover:underline">prathamg200404@gmail.com</a> or try the <a href="/playground" className="text-cyan-400 hover:underline">Playground</a> to test your integration.</p>

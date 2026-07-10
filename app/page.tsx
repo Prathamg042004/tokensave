@@ -182,10 +182,12 @@ export default function Home() {
       <footer className="border-t border-gray-800 max-w-6xl mx-auto px-6 md:px-8 py-8 flex flex-col md:flex-row justify-between items-center gap-4 text-gray-600 text-sm">
         <p>© 2026 TokenSave. All rights reserved.</p>
         <div className="flex gap-6">
-          <a href="/docs" className="hover:text-gray-400">Documentation</a>
-          <a href="/security" className="hover:text-gray-400">Security</a>
-          <a href="https://github.com/Prathamg042004/tokensave" className="hover:text-gray-400">GitHub</a>
-          <a href="mailto:prathamg200404@gmail.com" className="hover:text-gray-400">Contact</a>
+        <a href="/docs" className="hover:text-gray-400">Docs</a>
+<a href="/security" className="hover:text-gray-400">Security</a>
+<a href="/changelog" className="hover:text-gray-400">Changelog</a>
+<a href="/status" className="hover:text-gray-400">Status</a>
+<a href="https://github.com/Prathamg042004/tokensave" className="hover:text-gray-400">GitHub</a>
+<a href="mailto:prathamg200404@gmail.com" className="hover:text-gray-400">Contact</a>
         </div>
       </footer>
     </div>
