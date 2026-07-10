@@ -60,4 +60,21 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-}
+}export async function GET() {
+    return NextResponse.json({
+      service: "TokenSave Context Window Manager",
+      description: "Automatically trim old messages from long conversations to save tokens",
+      usage: {
+        method: "POST",
+        body: {
+          messages: [
+            { role: "system", content: "system prompt" },
+            { role: "user", content: "message 1" },
+            { role: "assistant", content: "reply 1" },
+            { role: "user", content: "latest message" }
+          ],
+          maxTokens: 4000,
+        },
+      },
+    });
+  }
