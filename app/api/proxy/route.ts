@@ -69,7 +69,7 @@ function getCacheKey(messages: any[]): string {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { messages, provider = "anthropic", apiKey, model: requestedModel } = body;
+    const { messages, provider = "anthropic", apiKey, model: requestedModel, quality = "auto", fallbackKeys = {} } = body;
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json({ error: "messages array is required" }, { status: 400 });
@@ -129,6 +129,65 @@ export async function POST(req: NextRequest) {
     const aiData = await aiResponse.json();
 
     if (aiResponse.status >= 400) {
+      const isRateLimit = aiResponse.status === 429 || (aiData.error?.message || "").toLowerCase().includes("rate") || (aiData.error?.message || "").toLowerCase().includes("quota") || (aiData.error?.message || "").toLowerCase().includes("limit");
+      
+      if (isRateLimit) {
+        const fallbackOrder = ["groq", "anthropic", "openai", "google"].filter((p) => p !== provider);
+        
+        for (const fbProvider of fallbackOrder) {
+          const fbKey = fallbackKeys[fbProvider];
+          if (!fbKey) continue;
+          
+          try {
+            const fbModel = pickModel(complexity, fbProvider);
+            let fbUrl = "";
+            let fbHeaders: any = { "Content-Type": "application/json" };
+            let fbBody: any = {};
+            
+            if (fbProvider === "anthropic") {
+              fbUrl = "https://api.anthropic.com/v1/messages";
+              fbHeaders["x-api-key"] = fbKey;
+              fbHeaders["anthropic-version"] = "2023-06-01";
+              fbBody = { model: fbModel, max_tokens: 1024, messages: optimizedMessages };
+            } else if (fbProvider === "openai") {
+              fbUrl = "https://api.openai.com/v1/chat/completions";
+              fbHeaders["Authorization"] = "Bearer " + fbKey;
+              fbBody = { model: fbModel, messages: optimizedMessages };
+            } else if (fbProvider === "google") {
+              fbUrl = "https://generativelanguage.googleapis.com/v1beta/models/" + fbModel + ":generateContent?key=" + fbKey;
+              fbBody = { contents: optimizedMessages.map((m: any) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })) };
+            } else if (fbProvider === "groq") {
+              fbUrl = "https://api.groq.com/openai/v1/chat/completions";
+              fbHeaders["Authorization"] = "Bearer " + fbKey;
+              fbBody = { model: fbModel, messages: optimizedMessages };
+            }
+            
+            const fbResponse = await fetch(fbUrl, { method: "POST", headers: fbHeaders, body: JSON.stringify(fbBody) });
+            if (fbResponse.status < 400) {
+              const fbData = await fbResponse.json();
+              await safeRedisSet(cacheKey, fbData, CACHE_TTL);
+              await safeLogRequest({ cache_hit: false, tokens_saved: savedChars, provider: fbProvider, model: fbModel, complexity, fallback: true });
+              return NextResponse.json({
+                ...fbData,
+                tokensave_meta: {
+                  cache_hit: false,
+                  model_used: fbModel,
+                  complexity,
+                  chars_saved: savedChars,
+                  quality_mode: qualityMode,
+                  method: "fallback",
+                  original_provider: provider,
+                  fallback_provider: fbProvider,
+                  note: provider + " rate limited. Automatically switched to " + fbProvider + ".",
+                },
+              });
+            }
+          } catch (e) {
+            continue;
+          }
+        }
+      }
+      
       return NextResponse.json({
         error: aiData.error,
         tokensave_meta: {
@@ -136,7 +195,8 @@ export async function POST(req: NextRequest) {
           model_used: model,
           complexity,
           chars_saved: savedChars,
-          note: "Error from " + provider + ", not TokenSave.",
+          quality_mode: qualityMode,
+          note: "Error from " + provider + ", not TokenSave." + (isRateLimit ? " No fallback providers configured. Add fallbackKeys to enable auto-switching." : ""),
         },
       }, { status: aiResponse.status });
     }

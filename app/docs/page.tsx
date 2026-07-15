@@ -311,6 +311,41 @@ print(response.json())`}</pre>
     ]
   }'`}</pre>
             <p className="text-gray-400 text-sm">Keeps system messages and the latest user message. Removes oldest conversation messages first until within the token limit.</p>
+          </section><section>
+            <h2 className="text-xl font-semibold mb-4 pb-2 border-b border-gray-800">POST /api/smart-context</h2>
+            <p className="text-gray-400 text-sm mb-4">Automatically summarize old messages in long conversations. A 50-message conversation (25,000 tokens) can be reduced to ~3,000 tokens (88% savings) while preserving all important context.</p>
+            <pre className="bg-gray-900 border border-gray-800 rounded-xl p-4 text-sm text-gray-400 overflow-x-auto mb-4">{`curl -X POST https://tokensave.vercel.app/api/smart-context \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "maxTokens": 4000,
+    "keepRecent": 6,
+    "messages": [
+      {"role": "user", "content": "message 1"},
+      {"role": "assistant", "content": "reply 1"},
+      ... (50 messages)
+      {"role": "user", "content": "latest question"}
+    ]
+  }'`}</pre>
+            <p className="text-gray-400 text-sm">Returns optimized messages with a summary replacing old messages. The most recent messages are kept in full.</p>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-semibold mb-4 pb-2 border-b border-gray-800">Multi-provider fallback</h2>
+            <p className="text-gray-400 text-sm mb-4">If your primary provider hits a rate limit, TokenSave can automatically switch to another provider. Add fallback API keys to enable this:</p>
+            <pre className="bg-gray-900 border border-gray-800 rounded-xl p-4 text-sm text-gray-400 overflow-x-auto mb-4">{`fetch("https://tokensave.vercel.app/api/proxy", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    provider: "anthropic",
+    apiKey: "your-claude-key",
+    fallbackKeys: {
+      groq: "your-groq-key",
+      openai: "your-openai-key"
+    },
+    messages: [{ role: "user", content: "Hello" }]
+  })
+})`}</pre>
+            <p className="text-gray-400 text-sm">If Claude is rate limited, TokenSave automatically tries Groq, then OpenAI. The response includes which provider was used. Your users never see a rate limit error.</p>
           </section>
           <section className="pb-8">
             <h2 className="text-xl font-semibold mb-4 pb-2 border-b border-gray-800">Support</h2>
