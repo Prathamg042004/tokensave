@@ -169,7 +169,7 @@ export default function Dashboard() {
     }
   };
 
-  if (loading) return <div className="min-h-screen bg-gray-950 flex items-center justify-center text-gray-500 text-sm">Loading...</div>;
+  if (loading) return <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center gap-4"><div className="w-10 h-10 bg-cyan-400 rounded-xl flex items-center justify-center text-gray-950 font-bold">TS</div><div className="w-5 h-5 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin"></div></div>;
 
   const totals = stats?.totals || { total_requests: 0, tokens_saved: 0, cache_hits: 0 };
   const days = stats?.days || [];

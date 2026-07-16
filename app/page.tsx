@@ -19,9 +19,7 @@ export default function Home() {
 
       <div className="max-w-6xl mx-auto px-6 md:px-8 pt-12 md:pt-16 pb-20">
         <div className="text-center max-w-3xl mx-auto">
-          <div className="inline-block px-4 py-1.5 bg-cyan-400/10 text-cyan-400 rounded-full text-sm font-medium mb-6 border border-cyan-400/20">Built for developer teams</div>
-          <h1 className="text-3xl md:text-5xl font-bold mb-6 leading-tight tracking-tight">Reduce your AI API costs <br className="hidden md:block" /><span className="text-cyan-400">by 50-60%</span></h1>
-          <p className="text-gray-400 text-base md:text-lg mb-10 max-w-2xl mx-auto leading-relaxed">TokenSave is an intelligent middleware layer that sits between your application and AI providers. We optimize every request through caching, smart routing, and prompt compression.</p>
+        <div className="inline-block px-4 py-1.5 bg-cyan-400/10 text-cyan-400 rounded-full text-sm font-medium mb-6 border border-cyan-400/20">Built for developer teams — real savings, no false promises</div>          <h1 className="text-3xl md:text-5xl font-bold mb-6 leading-tight tracking-tight">Reduce your AI API costs <br className="hidden md:block" /><span className="text-cyan-400">by up to 40%</span></h1>          <p className="text-gray-400 text-base md:text-lg mb-10 max-w-2xl mx-auto leading-relaxed">TokenSave is an intelligent middleware layer that sits between your application and AI providers. We optimize every request through caching, smart routing, and prompt compression.</p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-6">
             <button onClick={() => router.push("/login")} className="px-8 py-3.5 bg-cyan-400 text-gray-950 rounded-lg font-semibold hover:bg-cyan-300 text-base">Start 14-Day Free Trial</button>
             <button onClick={() => router.push("/playground")} className="px-8 py-3.5 border border-gray-700 text-gray-300 rounded-lg hover:bg-gray-900 text-base">Live Demo</button>

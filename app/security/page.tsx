@@ -60,9 +60,8 @@ export default function Security() {
                 <div className="space-y-2 text-sm">
                   <div className="flex items-center gap-3"><div className="w-5 h-5 bg-cyan-400/10 rounded flex items-center justify-center text-cyan-400 text-xs shrink-0">✓</div><span className="text-gray-300">Full data sovereignty — nothing leaves your network</span></div>
                   <div className="flex items-center gap-3"><div className="w-5 h-5 bg-cyan-400/10 rounded flex items-center justify-center text-cyan-400 text-xs shrink-0">✓</div><span className="text-gray-300">Audit the source code on GitHub before deploying</span></div>
-                  <div className="flex items-center gap-3"><div className="w-5 h-5 bg-cyan-400/10 rounded flex items-center justify-center text-cyan-400 text-xs shrink-0">✓</div><span className="text-gray-300">Deploy with Docker in under 5 minutes</span></div>
-                  <div className="flex items-center gap-3"><div className="w-5 h-5 bg-cyan-400/10 rounded flex items-center justify-center text-cyan-400 text-xs shrink-0">✓</div><span className="text-gray-300">Compliant with SOC 2, GDPR, HIPAA requirements</span></div>
-                </div>
+                  <div className="flex items-center gap-3"><div className="w-5 h-5 bg-cyan-400/10 rounded flex items-center justify-center text-cyan-400 text-xs shrink-0">✓</div><span className="text-gray-300">Deploy on your own infrastructure using our open source code</span></div>
+                  <div className="flex items-center gap-3"><div className="w-5 h-5 bg-cyan-400/10 rounded flex items-center justify-center text-cyan-400 text-xs shrink-0">✓</div><span className="text-gray-300">Compatible with your existing compliance setup (SOC 2, GDPR, HIPAA)</span></div>                </div>
               </div>
             </div>
           </section>
@@ -97,7 +96,7 @@ export default function Security() {
                     <tr className="border-b border-gray-800/50">
                       <td className="px-4 py-3">Responses</td>
                       <td className="px-4 py-3 text-amber-400 font-medium">Cached 30m</td>
-                      <td className="px-4 py-3 text-gray-500">Encrypted in Redis. Auto-deleted after 30 minutes.</td>
+                      <td className="px-4 py-3 text-gray-500">Stored in Redis with TLS in transit. Auto-deleted after 30 minutes.</td>
                     </tr>
                     <tr className="border-b border-gray-800/50">
                       <td className="px-4 py-3">Usage stats</td>
@@ -156,8 +155,7 @@ export default function Security() {
           </section>
         </div>
       </div>
-
-      <footer className="border-t border-gray-800 max-w-4xl mx-auto px-6 md:px-8 py-8 text-center text-gray-600 text-sm">© 2026 TokenSave. All rights reserved.</footer>
+      <footer className="border-t border-gray-800 max-w-4xl mx-auto px-6 md:px-8 py-8 flex flex-col md:flex-row justify-between items-center gap-4 text-gray-600 text-sm"><p>© 2026 TokenSave</p><div className="flex gap-4"><a href="/docs" className="hover:text-gray-400">Docs</a><a href="/security" className="hover:text-gray-400">Security</a><a href="/changelog" className="hover:text-gray-400">Changelog</a><a href="/status" className="hover:text-gray-400">Status</a></div></footer>
     </div>
   );
 }

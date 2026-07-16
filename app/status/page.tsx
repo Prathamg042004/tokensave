@@ -67,7 +67,8 @@ export default function Status() {
           <h1 className={`text-2xl font-bold mb-2 ${allOperational ? "text-green-400" : anyDown ? "text-red-400" : "text-amber-400"}`}>
             {allOperational ? "All Systems Operational" : anyDown ? "Service Disruption" : "Partial Degradation"}
           </h1>
-          <p className="text-gray-500 text-sm">Last checked: {lastChecked || "Checking..."}</p>
+          <p className="text-gray-500 text-sm">{lastChecked ? "Last checked: " + lastChecked : ""}</p>
+{!lastChecked && <div className="flex items-center justify-center gap-2 mt-2"><div className="w-4 h-4 border-2 border-green-400 border-t-transparent rounded-full animate-spin"></div><span className="text-gray-500 text-sm">Running health checks...</span></div>}
         </div>
 
         <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
@@ -94,7 +95,7 @@ export default function Status() {
         </div>
       </div>
 
-      <footer className="border-t border-gray-800 max-w-4xl mx-auto px-6 md:px-8 py-8 text-center text-gray-600 text-sm">© 2026 TokenSave. All rights reserved.</footer>
+      <footer className="border-t border-gray-800 max-w-4xl mx-auto px-6 md:px-8 py-8 flex flex-col md:flex-row justify-between items-center gap-4 text-gray-600 text-sm"><p>© 2026 TokenSave</p><div className="flex gap-4"><a href="/docs" className="hover:text-gray-400">Docs</a><a href="/security" className="hover:text-gray-400">Security</a><a href="/changelog" className="hover:text-gray-400">Changelog</a><a href="/status" className="hover:text-gray-400">Status</a></div></footer>
     </div>
   );
 }

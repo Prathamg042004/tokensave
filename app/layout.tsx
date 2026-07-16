@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TokenSave — Cut Your AI API Costs by 50-60%",
+  title: "TokenSave — Cut Your AI API Costs by up to 40%",
   description: "TokenSave is an intelligent middleware that reduces your Claude, GPT, and Gemini API bills through smart caching, model routing, and prompt compression.",
   icons: { icon: "/favicon.ico" },
 };

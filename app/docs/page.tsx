@@ -87,11 +87,41 @@ export default function Docs() {
                       <td className="px-4 py-3 text-gray-500">No</td>
                       <td className="px-4 py-3 text-gray-400">Your TokenSave API key for tracking and higher rate limits</td>
                     </tr>
-                    <tr>
+                    <tr className="border-b border-gray-800/50">
                       <td className="px-4 py-3 font-mono text-cyan-400">model</td>
                       <td className="px-4 py-3 text-gray-500">string</td>
                       <td className="px-4 py-3 text-gray-500">No</td>
                       <td className="px-4 py-3 text-gray-400">Override auto-routing with a specific model name</td>
+                    </tr>
+                    <tr className="border-b border-gray-800/50">
+                      <td className="px-4 py-3 font-mono text-cyan-400">quality</td>
+                      <td className="px-4 py-3 text-gray-500">string</td>
+                      <td className="px-4 py-3 text-gray-500">No</td>
+                      <td className="px-4 py-3 text-gray-400">&quot;auto&quot; (default), &quot;max_savings&quot;, or &quot;max_quality&quot;</td>
+                    </tr>
+                    <tr className="border-b border-gray-800/50">
+                      <td className="px-4 py-3 font-mono text-cyan-400">fallbackKeys</td>
+                      <td className="px-4 py-3 text-gray-500">object</td>
+                      <td className="px-4 py-3 text-gray-500">No</td>
+                      <td className="px-4 py-3 text-gray-400">Backup provider keys for auto-fallback on rate limits</td>
+                    </tr>
+                    <tr className="border-b border-gray-800/50">
+                      <td className="px-4 py-3 font-mono text-cyan-400">tags</td>
+                      <td className="px-4 py-3 text-gray-500">object</td>
+                      <td className="px-4 py-3 text-gray-500">No</td>
+                      <td className="px-4 py-3 text-gray-400">Custom key-value pairs for filtering and analytics</td>
+                    </tr>
+                    <tr className="border-b border-gray-800/50">
+                      <td className="px-4 py-3 font-mono text-cyan-400">userId</td>
+                      <td className="px-4 py-3 text-gray-500">string</td>
+                      <td className="px-4 py-3 text-gray-500">No</td>
+                      <td className="px-4 py-3 text-gray-400">Your user ID for per-user analytics tracking</td>
+                    </tr>
+                    <tr>
+                      <td className="px-4 py-3 font-mono text-cyan-400">webhookUrl</td>
+                      <td className="px-4 py-3 text-gray-500">string</td>
+                      <td className="px-4 py-3 text-gray-500">No</td>
+                      <td className="px-4 py-3 text-gray-400">URL to receive POST notifications on each request</td>
                     </tr>
                   </tbody>
                 </table>
@@ -157,7 +187,7 @@ print(response.json())`}</pre>
   // Original AI provider response fields...
   "tokensave_meta": {
     "cache_hit": false,
-    "model_used": "claude-haiku-4-5-20241022",
+    "model_used": "claude-haiku-4-5-20251001",
     "complexity": "simple",
     "chars_saved": 12,
     "method": "routed_to_cheap",
@@ -348,6 +378,11 @@ print(response.json())`}</pre>
             <p className="text-gray-400 text-sm">If Claude is rate limited, TokenSave automatically tries Groq, then OpenAI. The response includes which provider was used. Your users never see a rate limit error.</p>
           </section>
           <section className="pb-8">
+          <section>
+            <h2 className="text-xl font-semibold mb-4 pb-2 border-b border-gray-800">Code examples in 8 languages</h2>
+            <p className="text-gray-400 text-sm mb-4">View ready-to-copy integration examples in JavaScript, Python, Node.js, cURL, Ruby, PHP, Go, and Java.</p>
+            <a href="/docs/api-reference" className="inline-flex items-center gap-2 bg-gray-900 border border-gray-800 rounded-lg px-4 py-2.5 text-sm text-cyan-400 hover:border-cyan-400/50 transition-colors">View Full API Reference →</a>
+          </section>
             <h2 className="text-xl font-semibold mb-4 pb-2 border-b border-gray-800">Support</h2>
             <p className="text-gray-400 text-sm">Questions or issues? Email <a href="mailto:prathamg200404@gmail.com" className="text-cyan-400 hover:underline">prathamg200404@gmail.com</a> or try the <a href="/playground" className="text-cyan-400 hover:underline">Playground</a> to test your integration.</p>
           </section>
@@ -355,7 +390,7 @@ print(response.json())`}</pre>
         </div>
       </div>
 
-      <footer className="border-t border-gray-800 max-w-4xl mx-auto px-6 md:px-8 py-8 text-center text-gray-600 text-sm">© 2026 TokenSave. All rights reserved.</footer>
+      <footer className="border-t border-gray-800 max-w-4xl mx-auto px-6 md:px-8 py-8 flex flex-col md:flex-row justify-between items-center gap-4 text-gray-600 text-sm"><p>© 2026 TokenSave</p><div className="flex gap-4"><a href="/docs" className="hover:text-gray-400">Docs</a><a href="/security" className="hover:text-gray-400">Security</a><a href="/changelog" className="hover:text-gray-400">Changelog</a><a href="/status" className="hover:text-gray-400">Status</a></div></footer>
     </div>
   );
 }

@@ -3,7 +3,40 @@
 const updates = [
   {
     date: "July 2026",
-    version: "1.3.0",
+    version: "3.0.0",
+    title: "Production-Grade Proxy & Analytics",
+    changes: [
+      "Real per-token cost tracking on every request",
+      "Latency monitoring with average and P95 metrics",
+      "Error rate tracking and reporting",
+      "Per-user analytics and usage tracking",
+      "Custom tags on requests for filtering",
+      "Webhook notifications for events",
+      "Team management — create teams, invite members, assign roles",
+      "API key rotation with confirmation flow",
+      "16 supported models across 4 providers",
+      "Quality modes — auto, max_savings, max_quality",
+      "Multi-provider automatic fallback on rate limits",
+    ],
+  },
+  {
+    date: "July 2026",
+    version: "2.0.0",
+    title: "Smart Optimization & Heavy User Support",
+    changes: [
+      "Smart context summarization — reduce 50-message conversations by 88%",
+      "Smarter complexity detection — code syntax, reasoning, multi-turn awareness",
+      "Safe prompt compression — only removes meaningless filler phrases",
+      "Multi-provider fallback — auto-switch when rate limited",
+      "Custom model routing rules in dashboard",
+      "Request history with search and filters",
+      "Budget alerts with progress bar",
+      "API reference page with 8 programming languages",
+    ],
+  },
+  {
+    date: "July 2026",
+    version: "1.3.0",s
     title: "Batch Processing & Context Manager",
     changes: [
       "Batch API — process up to 50 prompts in a single request",
@@ -95,7 +128,7 @@ export default function Changelog() {
         </div>
       </div>
 
-      <footer className="border-t border-gray-800 max-w-4xl mx-auto px-6 md:px-8 py-8 text-center text-gray-600 text-sm">© 2026 TokenSave. All rights reserved.</footer>
+      <footer className="border-t border-gray-800 max-w-4xl mx-auto px-6 md:px-8 py-8 flex flex-col md:flex-row justify-between items-center gap-4 text-gray-600 text-sm"><p>© 2026 TokenSave</p><div className="flex gap-4"><a href="/docs" className="hover:text-gray-400">Docs</a><a href="/security" className="hover:text-gray-400">Security</a><a href="/changelog" className="hover:text-gray-400">Changelog</a><a href="/status" className="hover:text-gray-400">Status</a></div></footer>
     </div>
   );
 }

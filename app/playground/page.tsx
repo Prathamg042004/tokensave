@@ -54,6 +54,7 @@ const promptTemplates = [
 export default function Playground() {
   const [mode, setMode] = useState("single");
   const [apiKey, setApiKey] = useState("");
+const [keysLoaded, setKeysLoaded] = useState(false);
   const [provider, setProvider] = useState("anthropic");
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
@@ -111,6 +112,21 @@ const downloadResponse = (text: string, name: string) => {
 };
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chatMessages]);
+  useEffect(() => {
+    if (!keysLoaded) {
+      try {
+        const userId = document.cookie.split("user_id=")[1]?.split(";")[0] || "";
+        const allKeys = Object.keys(localStorage).filter((k) => k.startsWith("ts_keys_"));
+        if (allKeys.length > 0) {
+          const savedKeys = JSON.parse(localStorage.getItem(allKeys[0]) || "{}");
+          if (savedKeys[provider] && !apiKey) {
+            setApiKey(savedKeys[provider]);
+          }
+        }
+      } catch (e) {}
+      setKeysLoaded(true);
+    }
+  }, [keysLoaded, provider, apiKey]);
 
   const sendSingle = async () => {
     setLoading(true);
