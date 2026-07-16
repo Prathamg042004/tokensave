@@ -36,7 +36,7 @@ const updates = [
   },
   {
     date: "July 2026",
-    version: "1.3.0",s
+    version: "1.3.0",
     title: "Batch Processing & Context Manager",
     changes: [
       "Batch API — process up to 50 prompts in a single request",
