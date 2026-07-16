@@ -19,15 +19,12 @@ const MODEL_PRICING: any = {
   "gpt-4o-mini": { input: 0.15, output: 0.60, provider: "openai" },
   "gpt-4o": { input: 2.50, output: 10.00, provider: "openai" },
   "gpt-4-turbo": { input: 10.00, output: 30.00, provider: "openai" },
-  "gpt-3.5-turbo": { input: 0.50, output: 1.50, provider: "openai" },
   "gemini-2.0-flash-lite": { input: 0.075, output: 0.30, provider: "google" },
   "gemini-2.0-flash": { input: 0.15, output: 0.60, provider: "google" },
   "gemini-1.5-pro": { input: 1.25, output: 5.00, provider: "google" },
   "llama-3.1-8b-instant": { input: 0.05, output: 0.08, provider: "groq" },
   "llama-3.3-70b-versatile": { input: 0.59, output: 0.79, provider: "groq" },
   "mixtral-8x7b-32768": { input: 0.24, output: 0.24, provider: "groq" },
-  "gemma2-9b-it": { input: 0.20, output: 0.20, provider: "groq" },
-  "llama-guard-3-8b": { input: 0.20, output: 0.20, provider: "groq" },
   "deepseek-r1-distill-llama-70b": { input: 0.75, output: 0.99, provider: "groq" },
 };
 
