@@ -67,8 +67,7 @@ export default function Status() {
           <h1 className={`text-2xl font-bold mb-2 ${allOperational ? "text-green-400" : anyDown ? "text-red-400" : "text-amber-400"}`}>
             {allOperational ? "All Systems Operational" : anyDown ? "Service Disruption" : "Partial Degradation"}
           </h1>
-          <p className="text-gray-500 text-sm">{lastChecked ? "Last checked: " + lastChecked : ""}</p>
-{!lastChecked && <div className="flex items-center justify-center gap-2 mt-2"><div className="w-4 h-4 border-2 border-green-400 border-t-transparent rounded-full animate-spin"></div><span className="text-gray-500 text-sm">Running health checks...</span></div>}
+          <p className="text-gray-500 text-sm">{lastChecked ? "Last checked: " + lastChecked : "Running health checks..."}</p>
         </div>
 
         <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
