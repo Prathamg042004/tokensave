@@ -90,7 +90,8 @@ const updates = [
 
 export default function Changelog() {
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100">
+    <div className="min-h-screen bg-[#08090C] text-gray-100 relative overflow-hidden">
+      <div className="absolute top-[-300px] right-[-100px] w-[500px] h-[500px] bg-violet-500/[0.02] rounded-full blur-[120px] pointer-events-none"></div>
       <nav className="flex justify-between items-center px-6 md:px-8 py-4 border-b border-gray-800/50 max-w-4xl mx-auto">
         <a href="/" className="flex items-center gap-2">
           <div className="w-7 h-7 bg-cyan-400 rounded-md flex items-center justify-center text-gray-950 font-bold text-xs">TS</div>
@@ -103,7 +104,7 @@ export default function Changelog() {
       </nav>
 
       <div className="max-w-4xl mx-auto px-6 md:px-8 py-12">
-        <h1 className="text-3xl font-bold mb-2">Changelog</h1>
+      <h1 className="text-[32px] font-bold mb-2 tracking-tight bg-gradient-to-b from-white to-gray-400 bg-clip-text text-transparent">Changelog</h1>
         <p className="text-gray-500 mb-10">What&apos;s new in TokenSave. We ship updates frequently.</p>
 
         <div className="space-y-12">

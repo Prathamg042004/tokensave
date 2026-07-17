@@ -4,10 +4,11 @@ export default function Docs() {
   const proxyUrl = "https://tokensave.vercel.app/api/proxy";
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100">
-      <nav className="flex justify-between items-center px-6 md:px-8 py-4 border-b border-gray-800/50 max-w-4xl mx-auto">
+    <div className="min-h-screen bg-[#08090C] text-gray-100 relative overflow-hidden">
+      <div className="absolute top-[-300px] right-[-200px] w-[600px] h-[600px] bg-blue-500/[0.02] rounded-full blur-[120px] pointer-events-none"></div>
+      <nav className="relative z-10 flex justify-between items-center px-6 md:px-10 py-4 border-b border-white/[0.04] max-w-[1000px] mx-auto">
         <a href="/" className="flex items-center gap-2">
-          <div className="w-7 h-7 bg-cyan-400 rounded-md flex items-center justify-center text-gray-950 font-bold text-xs">TS</div>
+          <div className="w-7 h-7 bg-gradient-to-br from-cyan-400 to-blue-500 rounded-md flex items-center justify-center text-gray-950 font-bold text-xs">TS</div>
           <span className="text-lg font-bold">TokenSave</span>
         </a>
         <div className="flex gap-4">
@@ -17,7 +18,7 @@ export default function Docs() {
       </nav>
 
       <div className="max-w-4xl mx-auto px-6 md:px-8 py-12">
-        <h1 className="text-3xl font-bold mb-2">API Documentation</h1>
+      <h1 className="text-[32px] font-bold mb-2 tracking-tight bg-gradient-to-b from-white to-gray-400 bg-clip-text text-transparent">API Documentation</h1>
         <p className="text-gray-500 mb-10">Everything you need to integrate TokenSave into your application.</p>
 
         <div className="space-y-12">
