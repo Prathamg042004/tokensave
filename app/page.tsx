@@ -1,7 +1,11 @@
 ﻿"use client";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
-import { ProviderIcon } from "./icons";
+function ProviderIcon({ provider, size = 20 }: { provider: string; size?: number }) {
+  const colors: any = { anthropic: "#D4A574", openai: "#74AA9C", google: "#4285F4", groq: "#F55036" };
+  const letters: any = { anthropic: "A", openai: "O", google: "G", groq: "Q" };
+  return <div style={{ width: size, height: size, backgroundColor: (colors[provider] || "#888") + "20", color: colors[provider] || "#888", borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.5, fontWeight: 700 }}>{letters[provider] || "?"}</div>;
+}
 
 function LiveTerminal() {
   const [lines, setLines] = useState<{ text: string; color: string; delay: number }[]>([]);
