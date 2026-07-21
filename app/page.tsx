@@ -1,385 +1,359 @@
 ﻿"use client";
 import { useRouter } from "next/navigation";
-import { useState, useEffect, useRef, ReactNode } from "react";
+import { useState, useEffect, useRef, ReactNode, useCallback } from "react";
+import { ProviderLogo } from "./icons";
 
-function useInView(threshold = 0.2) {
+function useInView(threshold = 0.15) {
   const ref = useRef<HTMLDivElement>(null);
-  const [inView, setInView] = useState(false);
+  const [v, setV] = useState(false);
+  useEffect(() => { const el = ref.current; if (!el) return; const o = new IntersectionObserver(([e]) => { if (e.isIntersecting) setV(true); }, { threshold }); o.observe(el); return () => o.disconnect(); }, [threshold]);
+  return { ref, v };
+}
+
+function FadeUp({ children, delay = 0, className = "" }: { children: ReactNode; delay?: number; className?: string }) {
+  const { ref, v } = useInView();
+  return <div ref={ref} className={className} style={{ opacity: v ? 1 : 0, transform: v ? "translateY(0)" : "translateY(40px)", transition: `all 0.8s cubic-bezier(0.16,1,0.3,1) ${delay}s` }}>{children}</div>;
+}
+
+function ParticleField() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) setInView(true); }, { threshold });
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [threshold]);
-  return { ref, inView };
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    let animId: number;
+    let w = canvas.width = window.innerWidth;
+    let h = canvas.height = 800;
+    const particles: { x: number; y: number; vx: number; vy: number; r: number; o: number }[] = [];
+    for (let i = 0; i < 60; i++) particles.push({ x: Math.random() * w, y: Math.random() * h, vx: (Math.random() - 0.5) * 0.3, vy: (Math.random() - 0.5) * 0.3, r: Math.random() * 1.5 + 0.5, o: Math.random() * 0.4 + 0.1 });
+    function draw() {
+      ctx!.clearRect(0, 0, w, h);
+      particles.forEach(p => { p.x += p.vx; p.y += p.vy; if (p.x < 0 || p.x > w) p.vx *= -1; if (p.y < 0 || p.y > h) p.vy *= -1; ctx!.beginPath(); ctx!.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx!.fillStyle = `rgba(91,141,239,${p.o})`; ctx!.fill(); });
+      for (let i = 0; i < particles.length; i++) for (let j = i + 1; j < particles.length; j++) { const dx = particles[i].x - particles[j].x, dy = particles[i].y - particles[j].y, d = Math.sqrt(dx * dx + dy * dy); if (d < 120) { ctx!.beginPath(); ctx!.moveTo(particles[i].x, particles[i].y); ctx!.lineTo(particles[j].x, particles[j].y); ctx!.strokeStyle = `rgba(91,141,239,${0.06 * (1 - d / 120)})`; ctx!.stroke(); } }
+      animId = requestAnimationFrame(draw);
+    }
+    draw();
+    const resize = () => { w = canvas.width = window.innerWidth; h = canvas.height = 800; };
+    window.addEventListener("resize", resize);
+    return () => { cancelAnimationFrame(animId); window.removeEventListener("resize", resize); };
+  }, []);
+  return <canvas ref={canvasRef} className="absolute top-0 left-0 w-full pointer-events-none" style={{ height: 800 }} />;
 }
 
-function FadeIn({ children, delay = 0, className = "" }: { children: ReactNode; delay?: number; className?: string }) {
-  const { ref, inView } = useInView(0.15);
-  return <div ref={ref} className={className} style={{ opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(30px)", transition: `opacity 0.7s ease ${delay}s, transform 0.7s ease ${delay}s` }}>{children}</div>;
-}
-
-function DotGrid() {
+function OrbitingLogos() {
   return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ opacity: 0.3 }}>
-      <svg width="100%" height="100%"><defs><pattern id="dots" x="0" y="0" width="30" height="30" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="0.8" fill="#5B8DEF" opacity="0.3" /></pattern></defs><rect width="100%" height="100%" fill="url(#dots)" /></svg>
+    <div className="relative w-[300px] h-[300px] md:w-[400px] md:h-[400px]">
+      <div className="absolute inset-0 rounded-full border border-white/[0.04]" />
+      <div className="absolute inset-[15%] rounded-full border border-white/[0.06]" />
+      <div className="absolute inset-[35%] rounded-full border border-[#5B8DEF]/10" />
+      <div className="absolute inset-[40%] rounded-full bg-gradient-to-br from-[#5B8DEF]/20 to-[#A78BFA]/20 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 bg-gradient-to-br from-[#5B8DEF] to-[#A78BFA] rounded-xl flex items-center justify-center text-white font-bold text-lg mx-auto shadow-xl shadow-[#5B8DEF]/30">TS</div>
+          <p className="text-[10px] text-[#5A6577] mt-2">TokenSave</p>
+        </div>
+      </div>
+      {[
+        { provider: "anthropic", name: "Claude", angle: 0, speed: 20, radius: "2%", color: "#D4A574" },
+        { provider: "openai", name: "GPT", angle: 90, speed: 25, radius: "2%", color: "#74AA9C" },
+        { provider: "google", name: "Gemini", angle: 180, speed: 30, radius: "2%", color: "#4285F4" },
+        { provider: "groq", name: "Groq", angle: 270, speed: 22, radius: "2%", color: "#F55036" },
+      ].map((p, i) => (
+        <div key={p.provider} className="absolute inset-0" style={{ animation: `spin ${p.speed}s linear infinite`, animationDelay: `${-p.speed * (p.angle / 360)}s` }}>
+          <div className="absolute left-1/2 -translate-x-1/2" style={{ top: p.radius }}>
+            <div className="flex flex-col items-center" style={{ animation: `counter-spin ${p.speed}s linear infinite`, animationDelay: `${-p.speed * (p.angle / 360)}s` }}>
+              <div className="w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center border backdrop-blur-sm hover:scale-110 transition-transform cursor-default" style={{ backgroundColor: p.color + "10", borderColor: p.color + "30", boxShadow: `0 0 20px ${p.color}15` }}>
+                <ProviderLogo provider={p.provider} size={24} />
+              </div>
+              <span className="text-[10px] mt-1 font-medium" style={{ color: p.color }}>{p.name}</span>
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
 
-function GlowOrb({ color, size, top, left, delay = 0 }: { color: string; size: number; top: string; left: string; delay?: number }) {
-  return <div className="absolute rounded-full pointer-events-none" style={{ width: size, height: size, top, left, background: `radial-gradient(circle, ${color}15 0%, transparent 70%)`, animation: `float ${6 + delay}s ease-in-out infinite alternate`, animationDelay: `${delay}s` }} />;
-}
-
-function Typewriter({ text, speed = 40 }: { text: string; speed?: number }) {
-  const [shown, setShown] = useState(0);
-  const { ref, inView } = useInView();
-  useEffect(() => {
-    if (!inView) return;
-    const t = setInterval(() => setShown(p => { if (p >= text.length) { clearInterval(t); return p; } return p + 1; }), speed);
-    return () => clearInterval(t);
-  }, [inView, text, speed]);
-  return <span ref={ref}>{text.slice(0, shown)}<span className="animate-pulse text-[#5B8DEF]">|</span></span>;
-}
-
 function AnimatedTerminal() {
-  const [lines, setLines] = useState<string[]>([]);
-  const { ref, inView } = useInView(0.3);
-  const allLines = [
-    { t: '$ POST /api/proxy  {"provider":"anthropic"}', d: 0 },
-    { t: '⟩ Complexity: simple (6 words)', d: 600 },
-    { t: '⟩ Routed → claude-haiku  (66% cheaper)', d: 1200 },
-    { t: '⟩ Compressed: 3 filler tokens removed', d: 1800 },
-    { t: '⟩ Cache: MISS → forwarding to Anthropic', d: 2400 },
-    { t: '✓ Response: "Tokyo is the capital of Japan"', d: 3200 },
-    { t: '  cost: $0.0004 | saved: 66% | 340ms', d: 3600 },
-    { t: '', d: 4200 },
-    { t: '$ Same request again...', d: 4800 },
-    { t: '⟩ Cache: HIT ✓', d: 5400 },
-    { t: '  cost: $0.0000 | saved: 100% | 12ms', d: 5800 },
+  const lines = [
+    { t: '$ curl -X POST tokensave.vercel.app/api/proxy \\', c: "#E8ECF4", d: 0 },
+    { t: '  -d \'{"provider":"anthropic","messages":[...]}\'', c: "#5A6577", d: 400 },
+    { t: '', c: "", d: 700 },
+    { t: '⟩ Analyzing complexity... simple (6 words)', c: "#5A6577", d: 1000 },
+    { t: '⟩ Routing → claude-haiku (66% cheaper than sonnet)', c: "#5B8DEF", d: 1500 },
+    { t: '⟩ Compressed: removed 3 filler tokens', c: "#E8B94B", d: 2000 },
+    { t: '⟩ Cache: MISS — forwarding to Anthropic...', c: "#F472B6", d: 2500 },
+    { t: '', c: "", d: 3000 },
+    { t: '✓ "The capital of Japan is Tokyo."', c: "#4ADE80", d: 3500 },
+    { t: '  model: claude-haiku | cost: $0.0004 | saved: 66%', c: "#4ADE80", d: 3800 },
+    { t: '', c: "", d: 4300 },
+    { t: '$ # Sending exact same request again...', c: "#5A6577", d: 4800 },
+    { t: '', c: "", d: 5100 },
+    { t: '⚡ CACHE HIT — instant response', c: "#4ADE80", d: 5500 },
+    { t: '  cost: $0.0000 | latency: 12ms | saved: 100%', c: "#E8B94B", d: 5800 },
   ];
-  useEffect(() => {
-    if (!inView) return;
-    const timers = allLines.map((l, i) => setTimeout(() => setLines(p => [...p, l.t]), l.d));
-    return () => timers.forEach(clearTimeout);
-  }, [inView]);
+  const [shown, setShown] = useState<typeof lines>([]);
+  const { ref, v } = useInView(0.3);
+  useEffect(() => { if (!v) return; const ts = lines.map((l, i) => setTimeout(() => setShown(p => [...p, l]), l.d)); return () => ts.forEach(clearTimeout); }, [v]);
 
   return (
-    <div ref={ref} className="relative">
-      <div className="absolute -inset-0.5 bg-gradient-to-r from-[#5B8DEF] via-[#A78BFA] to-[#E8B94B] rounded-2xl opacity-20 blur-sm" />
+    <div ref={ref} className="relative group">
+      <div className="absolute -inset-1 bg-gradient-to-r from-[#5B8DEF] via-[#A78BFA] to-[#E8B94B] rounded-2xl opacity-0 group-hover:opacity-20 blur-md transition-opacity duration-500" />
+      <div className="absolute -inset-0.5 bg-gradient-to-r from-[#5B8DEF] via-[#A78BFA] to-[#4ADE80] rounded-2xl opacity-15 animate-gradient-rotate" />
       <div className="relative bg-[#0D1117] border border-white/10 rounded-2xl overflow-hidden">
-        <div className="flex items-center gap-1.5 px-4 py-2.5 border-b border-white/5 bg-white/[0.02]">
-          <div className="w-3 h-3 rounded-full bg-[#FF5F57]" /><div className="w-3 h-3 rounded-full bg-[#FEBC2E]" /><div className="w-3 h-3 rounded-full bg-[#28C840]" />
-          <span className="ml-3 text-[10px] text-[#3D4654] font-mono">terminal — tokensave</span>
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-white/5 bg-white/[0.02]">
+          <div className="w-3 h-3 rounded-full bg-[#FF5F57] hover:brightness-125 transition-all cursor-default" /><div className="w-3 h-3 rounded-full bg-[#FEBC2E] hover:brightness-125 transition-all cursor-default" /><div className="w-3 h-3 rounded-full bg-[#28C840] hover:brightness-125 transition-all cursor-default" />
+          <span className="ml-3 text-[11px] text-[#3D4654] font-mono">terminal — tokensave live demo</span>
+          <div className="ml-auto flex items-center gap-1.5"><div className="w-1.5 h-1.5 bg-[#4ADE80] rounded-full animate-pulse" /><span className="text-[9px] text-[#4ADE80]">LIVE</span></div>
         </div>
-        <div className="p-5 font-mono text-[12px] leading-[1.8] min-h-[280px]">
-          {lines.map((l, i) => (
-            <div key={i} style={{ animation: "fadeSlide 0.3s ease forwards", color: l.startsWith("✓") || l.includes("HIT") ? "#4ADE80" : l.startsWith("⟩") ? "#5B8DEF" : l.startsWith("$") ? "#E8ECF4" : l.includes("cost") ? "#E8B94B" : "#6B7A94" }}>{l || "\u00A0"}</div>
-          ))}
-          {lines.length < allLines.length && inView && <span className="inline-block w-2 h-4 bg-[#5B8DEF] animate-pulse" />}
+        <div className="p-5 font-mono text-[11px] md:text-[12px] leading-[1.9] min-h-[320px] overflow-hidden">
+          {shown.map((l, i) => <div key={i} className="animate-line" style={{ color: l.c, animationDelay: `${i * 0.05}s` }}>{l.t || "\u00A0"}</div>)}
+          {v && shown.length < lines.length && <span className="inline-block w-2 h-[18px] bg-[#5B8DEF] animate-blink ml-0.5" />}
         </div>
       </div>
     </div>
   );
 }
 
-function FlowDiagram() {
-  const { ref, inView } = useInView(0.2);
-  const providers = [
-    { name: "Claude", color: "#D4A574", y: 20 },
-    { name: "GPT", color: "#74AA9C", y: 65 },
-    { name: "Gemini", color: "#4285F4", y: 110 },
-    { name: "Groq", color: "#F55036", y: 155 },
-  ];
-  return (
-    <div ref={ref} className="w-full">
-      <svg viewBox="0 0 600 190" className="w-full" style={{ opacity: inView ? 1 : 0, transition: "opacity 1s ease" }}>
-        <defs>
-          <linearGradient id="lineGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#5B8DEF" /><stop offset="100%" stopColor="#4ADE80" /></linearGradient>
-          <filter id="glow"><feGaussianBlur stdDeviation="3" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
-        </defs>
-        <rect x="10" y="60" width="120" height="70" rx="12" fill="#12161E" stroke="#5B8DEF33" strokeWidth="1" />
-        <text x="70" y="92" textAnchor="middle" fill="#E8ECF4" fontSize="13" fontWeight="600" fontFamily="system-ui">Your App</text>
-        <text x="70" y="112" textAnchor="middle" fill="#5A6577" fontSize="10" fontFamily="system-ui">API request</text>
-
-        <rect x="190" y="30" width="160" height="130" rx="14" fill="#12161E" stroke="url(#lineGrad)" strokeWidth="1.5" />
-        <text x="270" y="58" textAnchor="middle" fill="#5B8DEF" fontSize="12" fontWeight="700" fontFamily="system-ui">TokenSave</text>
-        <text x="270" y="80" textAnchor="middle" fill="#4ADE80" fontSize="10" fontFamily="system-ui">✓ Cache check</text>
-        <text x="270" y="100" textAnchor="middle" fill="#A78BFA" fontSize="10" fontFamily="system-ui">✓ Smart routing</text>
-        <text x="270" y="120" textAnchor="middle" fill="#E8B94B" fontSize="10" fontFamily="system-ui">✓ Compression</text>
-        <text x="270" y="140" textAnchor="middle" fill="#F472B6" fontSize="10" fontFamily="system-ui">✓ Fallback</text>
-
-        {providers.map((p, i) => (
-          <g key={p.name}>
-            <rect x="420" y={p.y} width="110" height="32" rx="8" fill="#12161E" stroke={p.color + "44"} strokeWidth="1">
-              {inView && <animate attributeName="opacity" from="0" to="1" dur="0.5s" begin={`${0.5 + i * 0.15}s`} fill="freeze" />}
-            </rect>
-            <circle cx="438" cy={p.y + 16} r="5" fill={p.color} opacity="0.6" />
-            <text x="475" y={p.y + 20} textAnchor="middle" fill={p.color} fontSize="11" fontWeight="500" fontFamily="system-ui">{p.name}</text>
-          </g>
-        ))}
-
-        <line x1="130" y1="95" x2="190" y2="95" stroke="url(#lineGrad)" strokeWidth="1.5" strokeDasharray="4,3" filter="url(#glow)">
-          {inView && <animate attributeName="stroke-dashoffset" from="100" to="0" dur="2s" fill="freeze" />}
-        </line>
-        <line x1="350" y1="70" x2="420" y2="36" stroke="#D4A57444" strokeWidth="1" strokeDasharray="3,3">{inView && <animate attributeName="stroke-dashoffset" from="50" to="0" dur="1.5s" begin="0.3s" fill="freeze" />}</line>
-        <line x1="350" y1="85" x2="420" y2="81" stroke="#74AA9C44" strokeWidth="1" strokeDasharray="3,3">{inView && <animate attributeName="stroke-dashoffset" from="50" to="0" dur="1.5s" begin="0.45s" fill="freeze" />}</line>
-        <line x1="350" y1="100" x2="420" y2="126" stroke="#4285F444" strokeWidth="1" strokeDasharray="3,3">{inView && <animate attributeName="stroke-dashoffset" from="50" to="0" dur="1.5s" begin="0.6s" fill="freeze" />}</line>
-        <line x1="350" y1="115" x2="420" y2="171" stroke="#F5503644" strokeWidth="1" strokeDasharray="3,3">{inView && <animate attributeName="stroke-dashoffset" from="50" to="0" dur="1.5s" begin="0.75s" fill="freeze" />}</line>
-      </svg>
-    </div>
-  );
+function TiltCard({ children, className = "" }: { children: ReactNode; className?: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const handleMouse = useCallback((e: React.MouseEvent) => {
+    const el = ref.current; if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width - 0.5;
+    const y = (e.clientY - rect.top) / rect.height - 0.5;
+    el.style.transform = `perspective(800px) rotateY(${x * 6}deg) rotateX(${-y * 6}deg) scale(1.02)`;
+  }, []);
+  const handleLeave = useCallback(() => { if (ref.current) ref.current.style.transform = "perspective(800px) rotateY(0) rotateX(0) scale(1)"; }, []);
+  return <div ref={ref} onMouseMove={handleMouse} onMouseLeave={handleLeave} className={`transition-transform duration-200 ${className}`}>{children}</div>;
 }
 
-function StatsCounter({ value, suffix, label }: { value: number; suffix: string; label: string }) {
-  const [count, setCount] = useState(0);
-  const { ref, inView } = useInView(0.5);
-  useEffect(() => {
-    if (!inView) return;
-    let s = 0;
-    const step = value / 30;
-    const t = setInterval(() => { s += step; if (s >= value) { setCount(value); clearInterval(t); } else setCount(Math.floor(s)); }, 40);
-    return () => clearInterval(t);
-  }, [inView, value]);
-  return <div ref={ref} className="text-center"><p className="font-display text-[40px] md:text-[52px] font-bold tracking-tight text-white">{count}{suffix}</p><p className="text-[13px] text-[#5A6577] mt-1">{label}</p></div>;
+function Counter({ end, suffix, label, color }: { end: number; suffix: string; label: string; color: string }) {
+  const [val, setVal] = useState(0);
+  const { ref, v } = useInView(0.5);
+  useEffect(() => { if (!v) return; let t = 0; const dur = 1500; const start = performance.now(); const anim = (now: number) => { t = Math.min((now - start) / dur, 1); const ease = 1 - Math.pow(1 - t, 4); setVal(Math.floor(ease * end)); if (t < 1) requestAnimationFrame(anim); }; requestAnimationFrame(anim); }, [v, end]);
+  return <div ref={ref} className="text-center"><p className="text-[44px] md:text-[56px] font-bold tracking-tight" style={{ color }}>{val}{suffix}</p><p className="text-[13px] text-[#5A6577] mt-1">{label}</p></div>;
 }
 
-function ShimmerButton({ children, onClick }: { children: ReactNode; onClick: () => void }) {
+function FlowLine() {
+  const { ref, v } = useInView();
   return (
-    <button onClick={onClick} className="relative px-7 py-3 bg-[#5B8DEF] text-white rounded-xl text-[15px] font-semibold overflow-hidden group hover:bg-[#4A7CE0] transition-colors">
-      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
-      <span className="relative">{children}</span>
-    </button>
+    <svg ref={ref as any} viewBox="0 0 800 200" className="w-full h-auto" style={{ opacity: v ? 1 : 0, transition: "opacity 0.8s" }}>
+      <defs>
+        <linearGradient id="flow" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#5B8DEF" /><stop offset="50%" stopColor="#A78BFA" /><stop offset="100%" stopColor="#4ADE80" /></linearGradient>
+        <filter id="glow2"><feGaussianBlur stdDeviation="4" /><feMerge><feMergeNode /><feMergeNode in="SourceGraphic" /></feMerge></filter>
+      </defs>
+      <rect x="20" y="70" width="140" height="60" rx="12" fill="#12161E" stroke="#5B8DEF33" />
+      <text x="90" y="98" textAnchor="middle" fill="#E8ECF4" fontSize="14" fontWeight="600" fontFamily="system-ui">Your App</text>
+      <text x="90" y="118" textAnchor="middle" fill="#5A6577" fontSize="10" fontFamily="system-ui">sends request</text>
+      <rect x="280" y="40" width="200" height="120" rx="14" fill="#12161E" stroke="url(#flow)" strokeWidth="1.5" />
+      <text x="380" y="68" textAnchor="middle" fill="#5B8DEF" fontSize="13" fontWeight="700" fontFamily="system-ui">TokenSave</text>
+      <text x="380" y="90" textAnchor="middle" fill="#4ADE80" fontSize="11" fontFamily="system-ui">Cache · Route · Compress</text>
+      <text x="380" y="110" textAnchor="middle" fill="#E8B94B" fontSize="11" fontFamily="system-ui">Fallback · Quality modes</text>
+      <text x="380" y="135" textAnchor="middle" fill="#A78BFA" fontSize="9" fontFamily="system-ui">avg 40% savings</text>
+      {[{ name: "Claude", y: 35, color: "#D4A574" }, { name: "GPT", y: 75, color: "#74AA9C" }, { name: "Gemini", y: 115, color: "#4285F4" }, { name: "Groq", y: 155, color: "#F55036" }].map(p => (
+        <g key={p.name}><rect x="600" y={p.y} width="120" height="30" rx="8" fill="#12161E" stroke={p.color + "44"} /><circle cx="618" cy={p.y + 15} r="5" fill={p.color} /><text x="670" y={p.y + 19} textAnchor="middle" fill={p.color} fontSize="12" fontWeight="500" fontFamily="system-ui">{p.name}</text></g>
+      ))}
+      <path d="M160 100 L280 100" stroke="url(#flow)" strokeWidth="2" strokeDasharray="6,4" filter="url(#glow2)">{v && <animate attributeName="stroke-dashoffset" from="100" to="0" dur="2s" fill="freeze" />}</path>
+      {[35, 75, 115, 155].map((y, i) => <path key={i} d={`M480 100 L600 ${y + 15}`} stroke={["#D4A574", "#74AA9C", "#4285F4", "#F55036"][i] + "44"} strokeWidth="1.5" strokeDasharray="4,4">{v && <animate attributeName="stroke-dashoffset" from="60" to="0" dur="1.5s" begin={`${0.3 + i * 0.15}s`} fill="freeze" />}</path>)}
+      {v && <circle r="4" fill="#5B8DEF" filter="url(#glow2)"><animateMotion dur="2s" repeatCount="indefinite" path="M160 100 L280 100" /><animate attributeName="opacity" values="1;0.3;1" dur="2s" repeatCount="indefinite" /></circle>}
+    </svg>
   );
 }
 
 export default function Home() {
   const router = useRouter();
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+
+  useEffect(() => {
+    const handleMouse = (e: MouseEvent) => setMousePos({ x: e.clientX, y: e.clientY });
+    window.addEventListener("mousemove", handleMouse);
+    return () => window.removeEventListener("mousemove", handleMouse);
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#0A0D12] text-[#E8ECF4] overflow-hidden">
       <style jsx global>{`
-        @keyframes float { 0% { transform: translateY(0px); } 100% { transform: translateY(-20px); } }
-        @keyframes fadeSlide { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: translateX(0); } }
-        @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
-        @keyframes orbit { 0% { transform: rotate(0deg) translateX(8px) rotate(0deg); } 100% { transform: rotate(360deg) translateX(8px) rotate(-360deg); } }
-        @keyframes pulse-border { 0%,100% { border-color: rgba(91,141,239,0.15); } 50% { border-color: rgba(91,141,239,0.35); } }
-        .gradient-border { animation: pulse-border 3s ease-in-out infinite; }
-        .shimmer-text { background: linear-gradient(90deg, #E8ECF4 0%, #5B8DEF 50%, #E8ECF4 100%); background-size: 200% auto; animation: shimmer 3s linear infinite; -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes counter-spin { from { transform: rotate(0deg); } to { transform: rotate(-360deg); } }
+        @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+        @keyframes gradient-rotate { 0% { filter: hue-rotate(0deg); } 100% { filter: hue-rotate(360deg); } }
+        .animate-blink { animation: blink 0.8s step-end infinite; }
+        .animate-gradient-rotate { animation: gradient-rotate 8s linear infinite; }
+        .animate-line { animation: slideIn 0.3s ease forwards; opacity: 0; }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
+        .cursor-glow { position: fixed; width: 300px; height: 300px; border-radius: 50%; pointer-events: none; z-index: 0; background: radial-gradient(circle, rgba(91,141,239,0.06) 0%, transparent 70%); transition: left 0.3s ease, top 0.3s ease; }
       `}</style>
 
-      <DotGrid />
-      <GlowOrb color="#5B8DEF" size={600} top="-200px" left="60%" delay={0} />
-      <GlowOrb color="#A78BFA" size={400} top="40%" left="-10%" delay={2} />
-      <GlowOrb color="#4ADE80" size={300} top="70%" left="70%" delay={4} />
+      <div className="cursor-glow" style={{ left: mousePos.x - 150, top: mousePos.y - 150 }} />
+      <ParticleField />
 
-      <nav className="sticky top-0 z-50 bg-[#0A0D12]/70 backdrop-blur-xl border-b border-white/[0.04]">
+      <nav className="sticky top-0 z-50 bg-[#0A0D12]/60 backdrop-blur-2xl border-b border-white/[0.04]">
         <div className="flex justify-between items-center px-6 lg:px-12 py-3.5 max-w-[1200px] mx-auto">
-          <a href="/" className="flex items-center gap-2.5">
-            <div className="w-8 h-8 bg-gradient-to-br from-[#5B8DEF] to-[#A78BFA] rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-[#5B8DEF]/20">TS</div>
+          <a href="/" className="flex items-center gap-2.5 group">
+            <div className="w-8 h-8 bg-gradient-to-br from-[#5B8DEF] to-[#A78BFA] rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-[#5B8DEF]/20 group-hover:shadow-[#5B8DEF]/40 transition-shadow">TS</div>
             <span className="text-[17px] font-semibold tracking-tight">TokenSave</span>
           </a>
           <div className="hidden md:flex items-center gap-7">
             {["Playground", "Docs", "Security", "Changelog", "GitHub"].map(n => (
-              <a key={n} href={n === "GitHub" ? "https://github.com/Prathamg042004/tokensave" : `/${n.toLowerCase()}`} className="text-[13px] text-[#5A6577] hover:text-white transition-colors">{n}</a>
+              <a key={n} href={n === "GitHub" ? "https://github.com/Prathamg042004/tokensave" : `/${n.toLowerCase()}`} className="text-[13px] text-[#5A6577] hover:text-white transition-colors relative group">
+                {n}
+                <span className="absolute -bottom-1 left-0 w-0 h-[2px] bg-[#5B8DEF] group-hover:w-full transition-all duration-300" />
+              </a>
             ))}
           </div>
           <div className="flex gap-3 items-center">
             <button onClick={() => router.push("/login")} className="text-[13px] text-[#5A6577] hover:text-white transition-colors">Sign in</button>
-            <button onClick={() => router.push("/login")} className="px-4 py-2 bg-gradient-to-r from-[#5B8DEF] to-[#A78BFA] text-white rounded-lg text-[13px] font-medium hover:opacity-90 transition-opacity shadow-lg shadow-[#5B8DEF]/20">Start free</button>
+            <button onClick={() => router.push("/login")} className="relative px-5 py-2 bg-gradient-to-r from-[#5B8DEF] to-[#A78BFA] text-white rounded-lg text-[13px] font-medium overflow-hidden group shadow-lg shadow-[#5B8DEF]/20 hover:shadow-[#5B8DEF]/40 transition-shadow">
+              <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/25 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+              <span className="relative">Start free</span>
+            </button>
           </div>
         </div>
       </nav>
 
       <div className="relative z-10 max-w-[1200px] mx-auto px-6 lg:px-12">
 
-        <section className="pt-20 md:pt-28 pb-20">
+        <section className="pt-16 md:pt-24 pb-20">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-            <FadeIn>
+            <FadeUp>
               <div className="inline-flex items-center gap-2 bg-[#5B8DEF]/5 border border-[#5B8DEF]/15 rounded-full px-4 py-1.5 mb-6">
-                <div className="w-2 h-2 bg-[#4ADE80] rounded-full animate-pulse" />
-                <span className="text-[12px] text-[#7A8599]">Open source · 4 providers · 13 models</span>
+                <div className="w-2 h-2 bg-[#4ADE80] rounded-full animate-pulse" /><span className="text-[12px] text-[#7A8599]">Open source · v3.1 · 4 providers</span>
               </div>
               <h1 className="text-[40px] md:text-[56px] font-bold leading-[1.05] tracking-tight">
-                <Typewriter text="Stop overpaying for AI API calls" speed={35} />
+                Stop overpaying<br />for <span className="bg-gradient-to-r from-[#5B8DEF] via-[#A78BFA] to-[#4ADE80] bg-clip-text text-transparent">AI API calls</span>
               </h1>
-              <p className="text-[#7A8599] text-[17px] leading-[1.7] mt-6 max-w-[460px]">
-                TokenSave is middleware that automatically caches, routes, and compresses every request. Works with Claude, GPT, Gemini, and Groq.
-              </p>
+              <p className="text-[#7A8599] text-[17px] leading-[1.7] mt-6 max-w-[440px]">Middleware that automatically caches, routes, and compresses every request between your app and AI providers.</p>
               <div className="flex flex-wrap gap-3 mt-8">
-                <ShimmerButton onClick={() => router.push("/playground")}>Open playground</ShimmerButton>
-                <button onClick={() => router.push("/docs")} className="px-7 py-3 text-[#7A8599] rounded-xl text-[15px] border border-white/[0.08] hover:bg-white/[0.04] hover:border-white/[0.15] transition-all">Read docs</button>
+                <button onClick={() => router.push("/playground")} className="relative px-7 py-3.5 bg-gradient-to-r from-[#5B8DEF] to-[#A78BFA] text-white rounded-xl text-[15px] font-semibold overflow-hidden group shadow-xl shadow-[#5B8DEF]/25 hover:shadow-[#5B8DEF]/40 transition-shadow">
+                  <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+                  <span className="relative">Open playground</span>
+                </button>
+                <button onClick={() => router.push("/docs")} className="px-7 py-3.5 text-[#7A8599] rounded-xl text-[15px] border border-white/[0.08] hover:bg-white/[0.04] hover:border-white/[0.15] transition-all">Read docs</button>
               </div>
-              <div className="flex items-center gap-6 mt-10">
-                {[
-                  { name: "Anthropic", color: "#D4A574", letter: "A" },
-                  { name: "OpenAI", color: "#74AA9C", letter: "O" },
-                  { name: "Google", color: "#4285F4", letter: "G" },
-                  { name: "Groq", color: "#F55036", letter: "Q" },
-                ].map((p, i) => (
-                  <div key={p.name} className="flex items-center gap-2 group cursor-default" style={{ animation: `orbit 20s linear infinite`, animationDelay: `${i * -5}s`, animationPlayState: "paused" }}>
-                    <div className="w-8 h-8 rounded-lg flex items-center justify-center text-[11px] font-bold border group-hover:scale-110 transition-transform" style={{ backgroundColor: p.color + "12", color: p.color, borderColor: p.color + "30" }}>{p.letter}</div>
-                    <span className="text-[12px] text-[#5A6577] group-hover:text-white transition-colors">{p.name}</span>
-                  </div>
-                ))}
-              </div>
-            </FadeIn>
-            <FadeIn delay={0.3}>
-              <AnimatedTerminal />
-            </FadeIn>
+            </FadeUp>
+            <FadeUp delay={0.3} className="flex justify-center">
+              <OrbitingLogos />
+            </FadeUp>
           </div>
         </section>
 
-        <section className="py-12 border-t border-white/[0.04]">
+        <section className="py-16 border-t border-white/[0.04]">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-            <StatsCounter value={13} suffix="+" label="AI models" />
-            <StatsCounter value={40} suffix="%" label="avg savings" />
-            <StatsCounter value={100} suffix="%" label="cache savings" />
-            <StatsCounter value={12} suffix="ms" label="cache latency" />
+            <Counter end={13} suffix="+" label="AI models supported" color="#5B8DEF" />
+            <Counter end={40} suffix="%" label="Average savings" color="#4ADE80" />
+            <Counter end={100} suffix="%" label="Cache hit savings" color="#E8B94B" />
+            <Counter end={12} suffix="ms" label="Cache response time" color="#A78BFA" />
           </div>
         </section>
 
         <section className="py-20 border-t border-white/[0.04]">
-          <FadeIn>
-            <h2 className="text-[30px] md:text-[36px] font-bold tracking-tight text-center mb-4">How your requests are optimized</h2>
-            <p className="text-[#5A6577] text-[15px] text-center max-w-[500px] mx-auto mb-12">Every API call flows through the TokenSave pipeline before reaching the provider.</p>
-          </FadeIn>
-          <FadeIn delay={0.2}>
-            <div className="max-w-[700px] mx-auto bg-[#12161E]/60 backdrop-blur border border-white/[0.06] rounded-2xl p-6 md:p-8">
-              <FlowDiagram />
-            </div>
-          </FadeIn>
+          <FadeUp><h2 className="text-[30px] md:text-[38px] font-bold tracking-tight text-center">Watch a request get optimized</h2><p className="text-[#5A6577] text-[15px] text-center mt-3 mb-12">Real-time view of what happens inside the TokenSave pipeline.</p></FadeUp>
+          <FadeUp delay={0.2}><div className="max-w-[700px] mx-auto"><AnimatedTerminal /></div></FadeUp>
         </section>
 
         <section className="py-20 border-t border-white/[0.04]">
-          <FadeIn><h2 className="text-[30px] md:text-[36px] font-bold tracking-tight mb-10">Six optimization layers</h2></FadeIn>
+          <FadeUp><h2 className="text-[30px] md:text-[38px] font-bold tracking-tight text-center mb-12">The optimization pipeline</h2></FadeUp>
+          <FadeUp delay={0.2}><div className="max-w-[850px] mx-auto bg-[#12161E]/50 backdrop-blur border border-white/[0.06] rounded-2xl p-6"><FlowLine /></div></FadeUp>
+        </section>
+
+        <section className="py-20 border-t border-white/[0.04]">
+          <FadeUp><h2 className="text-[30px] md:text-[38px] font-bold tracking-tight mb-10">Six layers of optimization</h2></FadeUp>
           <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
             {[
-              { title: "Semantic cache", desc: "Same query = cached response instantly. $0 cost, 12ms.", metric: "100% savings", color: "#4ADE80", span: "md:col-span-4" },
-              { title: "Smart routing", desc: "Simple → Haiku. Complex → Sonnet. When unsure → always Sonnet.", metric: "66% cheaper", color: "#5B8DEF", span: "md:col-span-2" },
-              { title: "Compression", desc: "Strips filler phrases. Meaning preserved. Tokens reduced.", metric: "5-15% saved", color: "#E8B94B", span: "md:col-span-2" },
-              { title: "Provider fallback", desc: "Rate limited? Auto-switches to your backup provider.", metric: "Zero downtime", color: "#F472B6", span: "md:col-span-2" },
-              { title: "Quality modes", desc: "auto · max_savings · max_quality — you choose the tradeoff.", metric: "Full control", color: "#A78BFA", span: "md:col-span-2" },
-              { title: "Context summary", desc: "Compresses 50-message conversations to 3K tokens. 88% reduction.", metric: "Heavy users", color: "#FB923C", span: "md:col-span-3" },
+              { t: "Semantic cache", d: "Identical queries return cached responses. Zero API cost, 12ms latency.", m: "100% savings", c: "#4ADE80", s: "md:col-span-4" },
+              { t: "Smart routing", d: "Simple → cheap model. Complex → smart model. When unsure → always smart.", m: "Up to 66% cheaper", c: "#5B8DEF", s: "md:col-span-2" },
+              { t: "Compression", d: "Strips filler phrases while preserving meaning and intent.", m: "5-15% fewer tokens", c: "#E8B94B", s: "md:col-span-2" },
+              { t: "Auto-fallback", d: "Rate limited? Automatically switches to your backup provider.", m: "Zero downtime", c: "#F472B6", s: "md:col-span-2" },
+              { t: "Quality modes", d: "auto · max_savings · max_quality — you choose the tradeoff.", m: "Full control", c: "#A78BFA", s: "md:col-span-2" },
+              { t: "Context summary", d: "Compresses long conversations by 88%. Built for heavy users.", m: "50→6 messages", c: "#FB923C", s: "md:col-span-3" },
             ].map((f, i) => (
-              <FadeIn key={i} delay={i * 0.08} className={f.span}>
-                <div className="h-full bg-[#12161E]/60 backdrop-blur border border-white/[0.06] rounded-2xl p-5 hover:border-white/[0.15] transition-all duration-300 group gradient-border">
-                  <div className="flex items-center gap-2.5 mb-2">
-                    <div className="w-2.5 h-2.5 rounded-full group-hover:scale-150 transition-transform" style={{ backgroundColor: f.color, boxShadow: `0 0 12px ${f.color}40` }} />
-                    <h3 className="text-[14px] font-semibold">{f.title}</h3>
+              <FadeUp key={i} delay={i * 0.08} className={f.s}>
+                <TiltCard className="h-full">
+                  <div className="h-full bg-[#12161E]/60 backdrop-blur border border-white/[0.06] rounded-2xl p-5 hover:border-white/[0.15] transition-all group">
+                    <div className="flex items-center gap-2.5 mb-3"><div className="w-3 h-3 rounded-full group-hover:scale-150 transition-transform duration-300" style={{ backgroundColor: f.c, boxShadow: `0 0 15px ${f.c}40` }} /><h3 className="text-[15px] font-semibold">{f.t}</h3></div>
+                    <p className="text-[12px] text-[#5A6577] leading-relaxed">{f.d}</p>
+                    <p className="text-[12px] font-semibold mt-3" style={{ color: f.c }}>{f.m}</p>
                   </div>
-                  <p className="text-[12px] text-[#5A6577] leading-relaxed">{f.desc}</p>
-                  <p className="text-[12px] font-medium mt-3" style={{ color: f.color }}>{f.metric}</p>
-                </div>
-              </FadeIn>
+                </TiltCard>
+              </FadeUp>
             ))}
           </div>
         </section>
 
         <section className="py-20 border-t border-white/[0.04]">
-          <FadeIn>
-            <h2 className="text-[30px] md:text-[36px] font-bold tracking-tight text-center mb-8">One URL change. That&apos;s it.</h2>
-            <div className="max-w-[650px] mx-auto relative">
-              <div className="absolute -inset-1 bg-gradient-to-r from-[#5B8DEF]/20 via-[#A78BFA]/20 to-[#4ADE80]/20 rounded-2xl blur-lg" />
-              <div className="relative bg-[#0D1117] border border-white/[0.08] rounded-2xl overflow-hidden">
-                <div className="flex items-center gap-1.5 px-4 py-2.5 border-b border-white/[0.04]">
-                  <div className="w-3 h-3 rounded-full bg-[#FF5F57]" /><div className="w-3 h-3 rounded-full bg-[#FEBC2E]" /><div className="w-3 h-3 rounded-full bg-[#28C840]" />
-                  <span className="ml-3 text-[10px] text-[#3D4654] font-mono">your-app.js</span>
-                </div>
-                <div className="p-6 font-mono text-[14px] leading-[2]">
-                  <span className="text-[#3D4654]">{"// Before"}</span><br />
+          <FadeUp>
+            <h2 className="text-[30px] md:text-[38px] font-bold tracking-tight text-center mb-8">One line change</h2>
+            <div className="max-w-[650px] mx-auto relative group">
+              <div className="absolute -inset-2 bg-gradient-to-r from-[#5B8DEF]/15 via-[#A78BFA]/15 to-[#4ADE80]/15 rounded-2xl blur-xl group-hover:blur-2xl transition-all" />
+              <div className="relative bg-[#0D1117] border border-white/10 rounded-2xl overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-3 border-b border-white/5"><div className="w-3 h-3 rounded-full bg-[#FF5F57]" /><div className="w-3 h-3 rounded-full bg-[#FEBC2E]" /><div className="w-3 h-3 rounded-full bg-[#28C840]" /><span className="ml-3 text-[10px] text-[#3D4654] font-mono">your-app.js</span></div>
+                <div className="p-6 font-mono text-[14px] leading-[2.2]">
+                  <span className="text-[#3D4654]">// Before</span><br />
                   <span className="text-[#5A6577]">fetch(</span><span className="text-[#FF6B6B]/50 line-through">&quot;https://api.anthropic.com/v1/messages&quot;</span><span className="text-[#5A6577]">)</span><br /><br />
-                  <span className="text-[#3D4654]">{"// After — that's it"}</span><br />
+                  <span className="text-[#3D4654]">// After</span><br />
                   <span className="text-[#5A6577]">fetch(</span><span className="text-[#4ADE80]">&quot;https://tokensave.vercel.app/api/proxy&quot;</span><span className="text-[#5A6577]">)</span>
                 </div>
               </div>
             </div>
-          </FadeIn>
+          </FadeUp>
         </section>
 
         <section className="py-20 border-t border-white/[0.04]">
-          <FadeIn><h2 className="text-[30px] md:text-[36px] font-bold tracking-tight text-center mb-10">Your keys, your rules</h2></FadeIn>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {[
-              { title: "Cloud proxy", badge: "2 min setup", desc: "Swap one URL. Keys forwarded per-request, never stored by us.", color: "#5B8DEF", link: "/docs" },
-              { title: "SDK", badge: "Most private", desc: "Runs in your code. Keys never leave your server. Full local optimization.", color: "#4ADE80", link: "/docs/api-reference" },
-              { title: "Self-hosted", badge: "Full control", desc: "Clone the repo. Deploy anywhere. MIT licensed. Audit every line.", color: "#A78BFA", link: "https://github.com/Prathamg042004/tokensave" },
-            ].map((o, i) => (
-              <FadeIn key={i} delay={i * 0.1}>
-                <a href={o.link} className="block bg-[#12161E]/60 backdrop-blur border border-white/[0.06] rounded-2xl p-6 hover:border-white/[0.15] transition-all group h-full">
-                  <span className="text-[10px] font-medium uppercase tracking-wider px-2.5 py-1 rounded-full" style={{ color: o.color, backgroundColor: o.color + "12" }}>{o.badge}</span>
-                  <h3 className="text-[20px] font-semibold mt-4 group-hover:text-[#5B8DEF] transition-colors">{o.title}</h3>
-                  <p className="text-[13px] text-[#5A6577] mt-2 leading-relaxed">{o.desc}</p>
-                </a>
-              </FadeIn>
-            ))}
-          </div>
-        </section>
-
-        <section className="py-20 border-t border-white/[0.04]">
-          <FadeIn><h2 className="text-[30px] md:text-[36px] font-bold tracking-tight text-center">Pricing</h2><p className="text-[#5A6577] text-[15px] text-center mt-2 mb-10">Free to start. No credit card.</p></FadeIn>
+          <FadeUp><h2 className="text-[30px] md:text-[38px] font-bold tracking-tight text-center mb-10">Pricing</h2></FadeUp>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 max-w-[900px] mx-auto">
             {[
-              { name: "Starter", price: "$99", reqs: "50K requests", features: ["Cache + routing + compression", "4 providers, 13 models", "Dashboard analytics", "Email support"], primary: false },
-              { name: "Growth", price: "$499", reqs: "500K requests", features: ["Everything in Starter", "Quality modes", "Team management", "Auto-fallback", "Priority support"], primary: true },
-              { name: "Enterprise", price: "Custom", reqs: "Unlimited", features: ["Everything in Growth", "Custom routing", "Dedicated manager", "SLA guarantee", "Invoice billing"], primary: false },
+              { n: "Starter", p: "$99", r: "50K requests", f: ["Cache + routing + compression", "4 providers, 13 models", "Dashboard analytics", "Email support"], primary: false },
+              { n: "Growth", p: "$499", r: "500K requests", f: ["Everything in Starter", "Quality modes", "Team management", "Auto-fallback chains", "Priority support"], primary: true },
+              { n: "Enterprise", p: "Custom", r: "Unlimited", f: ["Everything in Growth", "Custom routing rules", "Dedicated manager", "SLA guarantee", "Invoice billing"], primary: false },
             ].map((p, i) => (
-              <FadeIn key={i} delay={i * 0.1}>
-                <div className={`relative bg-[#12161E]/60 backdrop-blur border rounded-2xl p-6 h-full ${p.primary ? "border-[#5B8DEF]/30 shadow-lg shadow-[#5B8DEF]/5" : "border-white/[0.06]"}`}>
-                  {p.primary && <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-[#5B8DEF] to-[#A78BFA] text-white text-[10px] font-semibold px-3 py-1 rounded-full">Recommended</div>}
-                  <p className="text-[13px] text-[#5A6577]">{p.name}</p>
-                  <p className="text-[36px] font-bold mt-1">{p.price}<span className="text-[14px] text-[#3D4654] font-normal">{p.price !== "Custom" ? "/mo" : ""}</span></p>
-                  <p className="text-[11px] text-[#3D4654]">{p.reqs}</p>
-                  <div className="mt-5 space-y-2.5">{p.features.map(f => <p key={f} className="text-[12px] text-[#5A6577]">— {f}</p>)}</div>
-                  <button onClick={() => p.name === "Enterprise" ? window.location.href = "mailto:prathamg200404@gmail.com" : router.push("/login")} className={`mt-6 w-full py-2.5 rounded-xl text-[13px] font-medium transition-all ${p.primary ? "bg-gradient-to-r from-[#5B8DEF] to-[#A78BFA] text-white hover:opacity-90 shadow-lg shadow-[#5B8DEF]/20" : "border border-white/[0.08] text-[#7A8599] hover:bg-white/[0.04]"}`}>{p.name === "Enterprise" ? "Contact sales" : "Start free"}</button>
-                </div>
-              </FadeIn>
+              <FadeUp key={i} delay={i * 0.1}>
+                <TiltCard className="h-full">
+                  <div className={`relative h-full bg-[#12161E]/60 backdrop-blur border rounded-2xl p-6 ${p.primary ? "border-[#5B8DEF]/30 shadow-xl shadow-[#5B8DEF]/10" : "border-white/[0.06]"}`}>
+                    {p.primary && <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-[#5B8DEF] to-[#A78BFA] text-white text-[10px] font-semibold px-3 py-1 rounded-full shadow-lg">Recommended</div>}
+                    <p className="text-[13px] text-[#5A6577]">{p.n}</p>
+                    <p className="text-[36px] font-bold mt-1">{p.p}<span className="text-[14px] text-[#3D4654] font-normal">{p.p !== "Custom" ? "/mo" : ""}</span></p>
+                    <p className="text-[11px] text-[#3D4654]">{p.r}</p>
+                    <div className="mt-5 space-y-2.5">{p.f.map(f => <p key={f} className="text-[12px] text-[#5A6577]">— {f}</p>)}</div>
+                    <button onClick={() => p.n === "Enterprise" ? window.location.href = "mailto:prathamg200404@gmail.com" : router.push("/login")} className={`mt-6 w-full py-3 rounded-xl text-[13px] font-medium transition-all ${p.primary ? "bg-gradient-to-r from-[#5B8DEF] to-[#A78BFA] text-white hover:opacity-90 shadow-lg shadow-[#5B8DEF]/20" : "border border-white/[0.08] text-[#7A8599] hover:bg-white/[0.04]"}`}>{p.n === "Enterprise" ? "Contact sales" : "Start free"}</button>
+                  </div>
+                </TiltCard>
+              </FadeUp>
             ))}
           </div>
         </section>
 
         <section className="py-20">
-          <FadeIn>
+          <FadeUp>
             <div className="relative">
-              <div className="absolute -inset-2 bg-gradient-to-r from-[#5B8DEF]/10 via-[#A78BFA]/10 to-[#4ADE80]/10 rounded-3xl blur-xl" />
-              <div className="relative bg-[#12161E]/80 backdrop-blur border border-white/[0.06] rounded-3xl p-10 md:p-14 text-center max-w-[700px] mx-auto">
-                <h2 className="text-[26px] md:text-[32px] font-bold shimmer-text">See it work on your queries</h2>
-                <p className="text-[#5A6577] text-[14px] mt-4 max-w-[400px] mx-auto">The playground uses your real API key. Send a prompt, see the savings, send again for cache hit.</p>
+              <div className="absolute -inset-4 bg-gradient-to-r from-[#5B8DEF]/10 via-[#A78BFA]/10 to-[#4ADE80]/10 rounded-[2rem] blur-2xl animate-pulse" />
+              <div className="relative bg-[#12161E]/80 backdrop-blur-xl border border-white/[0.08] rounded-3xl p-10 md:p-16 text-center max-w-[700px] mx-auto">
+                <h2 className="text-[28px] md:text-[34px] font-bold bg-gradient-to-r from-[#5B8DEF] via-[#A78BFA] to-[#4ADE80] bg-clip-text text-transparent">See it work on your queries</h2>
+                <p className="text-[#5A6577] text-[15px] mt-4">Send a prompt, see the optimization, send again for cache hit.</p>
                 <div className="flex gap-3 justify-center mt-8">
-                  <ShimmerButton onClick={() => router.push("/playground")}>Open playground</ShimmerButton>
-                  <button onClick={() => router.push("/docs")} className="px-7 py-3 text-[#7A8599] border border-white/[0.08] rounded-xl text-[14px] hover:bg-white/[0.04] transition-all">Documentation</button>
+                  <button onClick={() => router.push("/playground")} className="relative px-8 py-3.5 bg-gradient-to-r from-[#5B8DEF] to-[#A78BFA] text-white rounded-xl text-[15px] font-semibold overflow-hidden group shadow-xl shadow-[#5B8DEF]/25">
+                    <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+                    <span className="relative">Open playground</span>
+                  </button>
                 </div>
               </div>
             </div>
-          </FadeIn>
+          </FadeUp>
         </section>
       </div>
 
       <footer className="relative z-10 border-t border-white/[0.04]">
         <div className="max-w-[1200px] mx-auto px-6 lg:px-12 py-10">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-8">
-            <div>
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-6 h-6 bg-gradient-to-br from-[#5B8DEF] to-[#A78BFA] rounded-md flex items-center justify-center text-white font-bold text-[9px]">TS</div>
-                <span className="text-[14px] font-semibold">TokenSave</span>
-              </div>
-              <p className="text-[12px] text-[#3D4654] leading-relaxed">AI API cost optimization middleware. Open source.</p>
-            </div>
-            <div>
-              <p className="text-[11px] text-[#5A6577] uppercase tracking-wider font-medium mb-3">Product</p>
-              <div className="space-y-2">{[{ l: "Playground", h: "/playground" }, { l: "Dashboard", h: "/dashboard" }, { l: "Status", h: "/status" }, { l: "Changelog", h: "/changelog" }].map(a => <a key={a.l} href={a.h} className="block text-[12px] text-[#3D4654] hover:text-[#7A8599] transition-colors">{a.l}</a>)}</div>
-            </div>
-            <div>
-              <p className="text-[11px] text-[#5A6577] uppercase tracking-wider font-medium mb-3">Developers</p>
-              <div className="space-y-2">{[{ l: "Docs", h: "/docs" }, { l: "API Reference", h: "/docs/api-reference" }, { l: "Security", h: "/security" }, { l: "GitHub", h: "https://github.com/Prathamg042004/tokensave" }].map(a => <a key={a.l} href={a.h} className="block text-[12px] text-[#3D4654] hover:text-[#7A8599] transition-colors">{a.l}</a>)}</div>
-            </div>
-            <div>
-              <p className="text-[11px] text-[#5A6577] uppercase tracking-wider font-medium mb-3">Connect</p>
-              <div className="space-y-2">{[{ l: "Email", h: "mailto:prathamg200404@gmail.com" }, { l: "LinkedIn", h: "https://linkedin.com" }, { l: "Twitter", h: "https://twitter.com" }].map(a => <a key={a.l} href={a.h} className="block text-[12px] text-[#3D4654] hover:text-[#7A8599] transition-colors">{a.l}</a>)}</div>
-            </div>
+            <div><div className="flex items-center gap-2 mb-4"><div className="w-7 h-7 bg-gradient-to-br from-[#5B8DEF] to-[#A78BFA] rounded-lg flex items-center justify-center text-white font-bold text-[10px]">TS</div><span className="text-[14px] font-semibold">TokenSave</span></div><p className="text-[12px] text-[#3D4654]">AI API cost optimization. Open source.</p></div>
+            <div><p className="text-[11px] text-[#5A6577] uppercase tracking-wider font-medium mb-3">Product</p>{["Playground", "Dashboard", "Status", "Changelog"].map(l => <a key={l} href={`/${l.toLowerCase()}`} className="block text-[12px] text-[#3D4654] hover:text-[#7A8599] transition-colors py-1">{l}</a>)}</div>
+            <div><p className="text-[11px] text-[#5A6577] uppercase tracking-wider font-medium mb-3">Developers</p>{[{ l: "Docs", h: "/docs" }, { l: "API Reference", h: "/docs/api-reference" }, { l: "Security", h: "/security" }, { l: "GitHub", h: "https://github.com/Prathamg042004/tokensave" }].map(a => <a key={a.l} href={a.h} className="block text-[12px] text-[#3D4654] hover:text-[#7A8599] transition-colors py-1">{a.l}</a>)}</div>
+            <div><p className="text-[11px] text-[#5A6577] uppercase tracking-wider font-medium mb-3">Connect</p>{[{ l: "Email", h: "mailto:prathamg200404@gmail.com" }, { l: "LinkedIn", h: "https://linkedin.com" }, { l: "Twitter", h: "https://twitter.com" }].map(a => <a key={a.l} href={a.h} className="block text-[12px] text-[#3D4654] hover:text-[#7A8599] transition-colors py-1">{a.l}</a>)}</div>
           </div>
-          <div className="border-t border-white/[0.04] pt-6 text-center"><p className="text-[11px] text-[#3D4654]">© 2026 TokenSave. All rights reserved. Built with 💙 in India.</p></div>
+          <div className="border-t border-white/[0.04] pt-6 flex flex-col md:flex-row justify-between items-center gap-4">
+            <p className="text-[11px] text-[#3D4654]">© 2026 TokenSave. All rights reserved.</p>
+            <div className="flex gap-4">{["anthropic", "openai", "google", "groq"].map(p => <div key={p} className="opacity-30 hover:opacity-80 transition-opacity"><ProviderLogo provider={p} size={20} /></div>)}</div>
+          </div>
         </div>
       </footer>
     </div>
