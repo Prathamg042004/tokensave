@@ -1,36 +1,76 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# TokenSave
 
-## Getting Started
+AI API cost optimization middleware. Reduces Claude, GPT, Gemini, and Groq bills by up to 40% through automatic caching, smart model routing, and prompt compression.
 
-First, run the development server:
+**Live:** [tokensave.vercel.app](https://tokensave.vercel.app)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## How it works
+## Quick start
+
+Replace your AI provider URL:
+
+```js
+// Before
+fetch("https://api.anthropic.com/v1/messages", opts)
+
+// After
+fetch("https://tokensave.vercel.app/api/proxy", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    provider: "anthropic",
+    apiKey: "your-key",
+    messages: [{ role: "user", content: "Hello" }]
+  })
+})
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Providers
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Provider | Simple model | Complex model | Savings |
+|----------|-------------|---------------|---------|
+| Anthropic | claude-haiku-4-5 | claude-sonnet-4-6 | Up to 66% |
+| OpenAI | gpt-4o-mini | gpt-4o | Up to 94% |
+| Google | gemini-2.0-flash-lite | gemini-2.0-flash | Up to 50% |
+| Groq | llama-3.1-8b | llama-3.3-70b | Free |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## API endpoints
 
-## Learn More
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | /api/proxy | Main optimization proxy |
+| POST | /api/batch | Process up to 50 prompts |
+| POST | /api/smart-context | Summarize long conversations |
+| POST | /api/trim-context | Trim old messages |
+| GET | /api/stats | Usage analytics |
+| GET | /api/health | Service health checks |
+| POST | /api/generate-key | Generate/rotate API key |
+| POST | /api/webhooks | Manage webhook notifications |
+| POST | /api/teams | Team management |
+| GET | /api/audit | Security audit log |
 
-To learn more about Next.js, take a look at the following resources:
+## Tech stack
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- **Framework:** Next.js 15 (App Router)
+- **Auth:** Supabase (email, GitHub, Google OAuth)
+- **Cache:** Upstash Redis
+- **Hosting:** Vercel
+- **Language:** TypeScript
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Project structure
+## Environment variables
 
-## Deploy on Vercel
+```env
+NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+UPSTASH_REDIS_REST_URL=your-redis-url
+UPSTASH_REDIS_REST_TOKEN=your-redis-token
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## License
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+MIT
+
+## Author
+
+Pratham Gupta — [prathamg200404@gmail.com](mailto:prathamg200404@gmail.com)
