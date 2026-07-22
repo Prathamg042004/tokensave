@@ -1,4 +1,7 @@
-"use client";
+const fs = require('fs');
+
+// Fix changelog
+const changelog = `"use client";
 
 const updates = [
   { date: "July 2026", version: "3.1.0", title: "Security & Production Hardening", changes: ["Rate limiting with standard headers (60 req/min)", "Input validation and sanitization on all endpoints", "Security headers middleware (HSTS, CSP, XSS)", "Health check endpoint (/api/health)", "Audit logging with hashed IPs", "Error boundary for graceful crash handling", "Sentry error monitoring integration", "BetterUptime monitoring (3 monitors)"] },
@@ -41,7 +44,10 @@ export default function Changelog() {
           ))}
         </div>
       </div>
-      <footer className="border-t border-white/[0.04] max-w-[800px] mx-auto px-6 py-8 flex flex-col md:flex-row justify-between items-center gap-4 text-[#3D4654] text-[12px]"><p>\u00a9 2026 TokenSave</p><div className="flex gap-4"><a href="/docs" className="hover:text-[#5A6577]">Docs</a><a href="/security" className="hover:text-[#5A6577]">Security</a><a href="/changelog" className="hover:text-[#5A6577]">Changelog</a><a href="/status" className="hover:text-[#5A6577]">Status</a></div></footer>
+      <footer className="border-t border-white/[0.04] max-w-[800px] mx-auto px-6 py-8 flex flex-col md:flex-row justify-between items-center gap-4 text-[#3D4654] text-[12px]"><p>\\u00a9 2026 TokenSave</p><div className="flex gap-4"><a href="/docs" className="hover:text-[#5A6577]">Docs</a><a href="/security" className="hover:text-[#5A6577]">Security</a><a href="/changelog" className="hover:text-[#5A6577]">Changelog</a><a href="/status" className="hover:text-[#5A6577]">Status</a></div></footer>
     </div>
   );
-}
+}`;
+
+fs.writeFileSync('app/changelog/page.tsx', changelog);
+console.log('Changelog fixed with v3.1.0, v3.0.0, v2.0.0!');
