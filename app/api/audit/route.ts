@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Redis } from "@upstash/redis";
 
-export async function GET(req) {
+export async function GET(req: any) {
   const auth = req.headers.get("authorization");
   if (!auth || !auth.startsWith("Bearer ts_live_")) {
     return NextResponse.json({ error: "Auth required" }, { status: 401 });
@@ -14,5 +14,5 @@ export async function GET(req) {
     const logs = await redis.lrange("audit_log", 0, 99) || [];
     const parsed = logs.map((l) => { try { return typeof l === "string" ? JSON.parse(l) : l; } catch { return l; } });
     return NextResponse.json({ service: "TokenSave Audit Log", total: parsed.length, entries: parsed });
-  } catch (e) { return NextResponse.json({ error: e.message }, { status: 500 }); }
+  } catch (e:any) { return NextResponse.json({ error:e.message }, { status: 500 }); }
 }
