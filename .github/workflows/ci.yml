@@ -54,8 +54,9 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - run: npm ci
-      - name: ESLint
-        run: npm run lint || echo "::warning::ESLint reported violations - see issue #5"
+      - name: ESLint (advisory)
+        run: |
+          npm run lint || echo "::warning::ESLint reported violations - see issue 5"
 
   test:
     name: Test (Node ${{ matrix.node }})
