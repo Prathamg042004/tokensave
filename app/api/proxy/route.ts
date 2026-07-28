@@ -1,13 +1,12 @@
-﻿import { NextRequest, NextResponse } from "next/server";
-import { Redis } from "@upstash/redis";
+import { createHash, randomUUID } from "node:crypto";
 
-// Redis connection
-let redis: any = null;
-try {
-  const url = process.env.UPSTASH_REDIS_REST_URL || "";
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN || "";
-  if (url && token) redis = new Redis({ url, token });
-} catch (e) {}
+import { NextRequest, NextResponse } from "next/server";
+
+import { getRedis, requireApiKey } from "@/app/lib/auth";
+import { safeWebhookUrl } from "@/app/lib/net";
+
+// Redis connection, shared with the rest of the API.
+const redis = getRedis();
 
 // Constants
 const CACHE_TTL = 1800;
@@ -16,6 +15,8 @@ const RATE_WINDOW = 60;
 const MAX_BODY_SIZE = 500000;
 const MAX_MESSAGE_LENGTH = 100000;
 const MAX_MESSAGES = 100;
+const PROVIDER_TIMEOUT = 30000;
+const WEBHOOK_TIMEOUT = 5000;
 
 // Model pricing per million tokens [input, output]
 const PRICING: Record<string, [number, number]> = {
@@ -55,10 +56,29 @@ async function rExpire(key: string, seconds: number): Promise<void> {
   try { await redis.expire(key, seconds); } catch {}
 }
 
+/**
+ * The webhook target for an account, or null when there is nothing safe to call.
+  *
+   * The URL is always read from the account's registered configuration and
+    * screened again on the way out. It is never taken from the request body:
+     * that let any caller point the platform at an address of their choosing.
+      */
+async function registeredWebhookUrl(userId: string): Promise<string | null> {
+    const raw = await rGet("webhook:" + userId);
+    if (!raw) return null;
+    try {
+          const config = typeof raw === "string" ? JSON.parse(raw) : raw;
+          if (!config || config.active === false) return null;
+          return safeWebhookUrl(config.url)?.toString() || null;
+    } catch {
+          return null;
+    }
+}
+
 async function logRequest(data: any): Promise<void> {
   if (!redis) return;
   try {
-    const entry = { ...data, timestamp: Date.now(), id: "req_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6) };
+    const entry = { ...data, timestamp: Date.now(), id: "req_" + randomUUID() };
     await redis.lpush("request_logs", JSON.stringify(entry));
     await redis.ltrim("request_logs", 0, 999);
 
@@ -101,6 +121,8 @@ async function logRequest(data: any): Promise<void> {
     // Webhook
     if (data.webhookUrl) {
       fetch(data.webhookUrl, {
+        redirect: "manual",
+        signal: AbortSignal.timeout(WEBHOOK_TIMEOUT),
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ event: "request_completed", data: entry }),
@@ -190,14 +212,13 @@ function compressPrompt(text: string): { compressed: string; savedChars: number 
   return { compressed: c, savedChars: text.length - c.length };
 }
 
-function getCacheKey(messages: any[]): string {
+function getCacheKey(userId: string, messages: any[]): string {
   const raw = messages.map((m: any) => m.role + ":" + m.content).join("|");
-  let hash = 0;
-  for (let i = 0; i < raw.length; i++) {
-    hash = ((hash << 5) - hash) + raw.charCodeAt(i);
-    hash = hash & hash;
-  }
-  return "cache:" + Math.abs(hash).toString(36);
+  // Namespaced per account and hashed with SHA-256. The old 32-bit hash lived in
+  // one global namespace, so two accounts could collide and read each other's
+  // completions straight out of the cache.
+  const digest = createHash("sha256").update(userId + "::" + raw).digest("hex");
+  return "cache:" + userId + ":" + digest;
 }
 
 // Input validation
@@ -260,7 +281,15 @@ function buildProviderRequest(provider: string, model: string, apiKey: string, m
 // POST handler
 export async function POST(req: NextRequest) {
   const startTime = Date.now();
-  const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  // Every call is tied to a verified TokenSave key. The route used to relay to
+  // the providers for anyone who found the URL, and it trusted body.userId and
+  // body.tsKey, so a caller could bill another account and pick its own rate
+  // limit bucket.
+  const auth = await requireApiKey(req);
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+  const userId = auth.auth.userId;
 
   try {
     // Request size check
@@ -271,12 +300,10 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
 
-    // Validate input
     const validationError = validateInput(body);
     if (validationError) {
       return NextResponse.json({ error: validationError }, { status: 400 });
     }
-
     const {
       messages,
       provider = "anthropic",
@@ -285,12 +312,15 @@ export async function POST(req: NextRequest) {
       quality = "auto",
       fallbackKeys = {},
       tags = {},
-      userId,
-      webhookUrl,
     } = body;
-
-    // Rate limiting
-    const rateLimitId = body.tsKey || clientIp;
+    
+    // The webhook target comes from the account's registered configuration,
+    // never from the request body.
+    const webhookUrl = await registeredWebhookUrl(userId);
+    
+    // Rate limiting is bucketed by the verified key. A caller used to be able
+    // to choose its own bucket by sending any tsKey, or to share one by IP.
+    const rateLimitId = auth.auth.keyHash;
     const rlCount = await rIncr("rl:" + rateLimitId);
     if (rlCount === 1) await rExpire("rl:" + rateLimitId, RATE_WINDOW);
 
@@ -319,7 +349,7 @@ export async function POST(req: NextRequest) {
     }));
 
     // Check cache
-    const cacheKey = getCacheKey(cleanMessages);
+    const cacheKey = getCacheKey(userId, cleanMessages);
     const cached = await rGet(cacheKey);
 
     if (cached) {
@@ -329,7 +359,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         ...cachedData,
         tokensave_meta: {
-          request_id: "req_" + Date.now().toString(36),
+          request_id: "req_" + randomUUID(),
           cache_hit: true,
           tokens_saved: "100%",
           method: "cache",
@@ -363,7 +393,7 @@ export async function POST(req: NextRequest) {
 
     // Build and send request
     const { url: apiUrl, headers, body: apiBody } = buildProviderRequest(provider, model, apiKey, optimizedMessages);
-    const aiResponse = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify(apiBody) });
+    const aiResponse = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify(apiBody), signal: AbortSignal.timeout(PROVIDER_TIMEOUT) });
     const aiData = await aiResponse.json();
     const latency = Date.now() - startTime;
 
@@ -383,7 +413,7 @@ export async function POST(req: NextRequest) {
           try {
             const fbModel = pickModel(complexity, fbProvider);
             const { url: fbUrl, headers: fbHeaders, body: fbBody } = buildProviderRequest(fbProvider, fbModel, fbKey, optimizedMessages);
-            const fbResponse = await fetch(fbUrl, { method: "POST", headers: fbHeaders, body: JSON.stringify(fbBody) });
+            const fbResponse = await fetch(fbUrl, { method: "POST", headers: fbHeaders, body: JSON.stringify(fbBody), signal: AbortSignal.timeout(PROVIDER_TIMEOUT) });
 
             if (fbResponse.status < 400) {
               const fbData = await fbResponse.json();
@@ -403,7 +433,7 @@ export async function POST(req: NextRequest) {
               return NextResponse.json({
                 ...fbData,
                 tokensave_meta: {
-                  request_id: "req_" + Date.now().toString(36),
+                  request_id: "req_" + randomUUID(),
                   cache_hit: false, model_used: fbModel, complexity, chars_saved: savedChars,
                   quality_mode: quality, method: "fallback", latency_ms: fbLatency,
                   original_provider: provider, fallback_provider: fbProvider,
@@ -428,7 +458,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         error: aiData.error,
         tokensave_meta: {
-          request_id: "req_" + Date.now().toString(36),
+          request_id: "req_" + randomUUID(),
           cache_hit: false, model_used: model, complexity, chars_saved: savedChars,
           quality_mode: quality, latency_ms: latency, is_error: true, tags: cleanTags,
           note: "Error from " + provider + "." + (isRateLimit ? " Add fallbackKeys for auto-switching." : ""),
@@ -451,7 +481,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ...aiData,
       tokensave_meta: {
-        request_id: "req_" + Date.now().toString(36),
+        request_id: "req_" + randomUUID(),
         cache_hit: false, model_used: model, complexity, chars_saved: savedChars,
         quality_mode: quality, latency_ms: latency,
         method: complexity === "simple" ? "routed_to_cheap" : "routed_to_smart",
@@ -463,10 +493,13 @@ export async function POST(req: NextRequest) {
       headers: { "X-RateLimit-Remaining": String(Math.max(0, RATE_LIMIT - rlCount)), "X-RateLimit-Limit": String(RATE_LIMIT) },
     });
 
-  } catch (error: any) {
-    const latency = Date.now() - startTime;
-    await logRequest({ is_error: true, error_message: error.message, latency });
-    return NextResponse.json({ error: "TokenSave proxy error: " + error.message }, { status: 500 });
+  } catch (error) {
+        const latency = Date.now() - startTime;
+        const detail = error instanceof Error ? error.message : "Unknown error";
+        // The detail is kept in the log. The caller only ever sees a generic
+        // message because the raw text can carry a connection string.
+        await logRequest({ is_error: true, error_message: detail, latency });
+        return NextResponse.json({ error: "TokenSave proxy error" }, { status: 500 });
   }
 }
 
