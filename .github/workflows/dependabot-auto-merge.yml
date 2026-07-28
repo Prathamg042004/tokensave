@@ -1,0 +1,48 @@
+name: Dependabot auto-merge
+
+# Patch and minor bumps merge themselves once the required checks pass, so a
+# solo maintainer is not the bottleneck for routine security patches.
+# Major bumps are always left for a human.
+#
+# Requires two repository settings that cannot be set from a workflow file:
+#   Settings > General > Allow auto-merge
+#   Settings > Branches > protect main and require the "CI OK" check
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  auto-merge:
+    name: Enable auto-merge for safe bumps
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Fetch update metadata
+        id: meta
+        uses: dependabot/fetch-metadata@21025c705c08248db411dc16f3619e6b5f9ea21a # v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Enable auto-merge for patch and minor updates
+        if: steps.meta.outputs.update-type != 'version-update:semver-major'
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr merge --auto --squash "$PR_URL" || \
+            echo "::warning::could not enable auto-merge - check that auto-merge is allowed and main is protected"
+
+      - name: Explain why a major bump was left alone
+        if: steps.meta.outputs.update-type == 'version-update:semver-major'
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr comment "$PR_URL" --body "Major version bump, so auto-merge stays off. A maintainer needs to read the upstream changelog before this lands." || true
