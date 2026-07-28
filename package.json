@@ -12,9 +12,9 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc --noEmit",
-    "test": "node --test tests",
-    "test:watch": "node --test --watch tests",
-    "test:coverage": "node --test --experimental-test-coverage tests",
+    "test": "node --test",
+    "test:watch": "node --test --watch",
+    "test:coverage": "node --test --experimental-test-coverage",
     "verify": "npm run typecheck && npm run lint && npm test && npm run build",
     "health": "curl -s https://tokensave.vercel.app/api/health | node -e \"const d=require('fs').readFileSync('/dev/stdin','utf8');const j=JSON.parse(d);console.log('Status:',j.status);Object.entries(j.services).forEach(([k,v])=>console.log(' ',k+':',v.status))\"",
     "check": "echo 'Checking all endpoints...' && curl -s -o /dev/null -w '%{http_code}' https://tokensave.vercel.app && echo ' Landing: OK' && curl -s -o /dev/null -w '%{http_code}' https://tokensave.vercel.app/api/proxy && echo ' Proxy: OK' && curl -s -o /dev/null -w '%{http_code}' https://tokensave.vercel.app/api/health && echo ' Health: OK'"
