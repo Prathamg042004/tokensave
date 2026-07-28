@@ -7,6 +7,7 @@
 A drop-in middleware for Claude, GPT, Gemini and Groq. Measured in dollars, not bytes.
 
 [![CI](https://github.com/Prathamg042004/tokensave/actions/workflows/ci.yml/badge.svg)](https://github.com/Prathamg042004/tokensave/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/Prathamg042004/tokensave/actions/workflows/codeql.yml/badge.svg)](https://github.com/Prathamg042004/tokensave/actions/workflows/codeql.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![Stars](https://img.shields.io/github/stars/Prathamg042004/tokensave?style=flat)](https://github.com/Prathamg042004/tokensave/stargazers)
 
@@ -129,11 +130,14 @@ TokenSave is pre-1.0 and maintained by one person. Being upfront about it:
 
 | Area | Status |
 | --- | --- |
-| Typecheck in CI | Passing |
-| Secret scanning (gitleaks) in CI | Passing |
-| CodeQL static analysis in CI | Passing |
+| Typecheck in CI | Required check |
+| Production build in CI | Required check |
+| Unit tests in CI | Required check, runs on Node 20 and 22 |
+| Secret scanning (gitleaks) in CI | Required check |
+| CodeQL static analysis | Runs on every PR and weekly |
+| Supply chain (OpenSSF Scorecard, pinned actions, Dependabot) | Automated |
 | ESLint | Advisory, existing violations tracked in an open issue |
-| Automated tests | Not yet, highest-priority gap |
+| Test coverage | Thin: SDK helpers, pricing coverage and workflow policy only. API routes are not covered yet |
 | SDK on npm | Not yet, `sdk/` is source only |
 | Docker image and self-host guide | Not yet |
 | Streaming and tool calling | Not supported yet |

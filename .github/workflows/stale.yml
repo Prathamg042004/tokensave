@@ -1,0 +1,45 @@
+name: Stale
+
+# A single maintainer cannot triage forever. This keeps the tracker honest
+# without silently burying anything a contributor might pick up.
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  stale:
+    name: Mark and close inactive threads
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/stale@4391f3da665fdf50b6810c1a66712fb9ba21aa93 # v11.0.0
+        with:
+          days-before-stale: 45
+          days-before-close: 14
+          operations-per-run: 100
+          stale-issue-label: stale
+          stale-pr-label: stale
+          exempt-issue-labels: "good first issue,help wanted,roadmap,security,pinned"
+          exempt-pr-labels: "dependencies,security,pinned"
+          exempt-all-milestones: true
+          stale-issue-message: >
+            No activity here for 45 days, so this is being marked stale and will
+            close in 14 days. A comment restarts the clock - a maintainer may
+            simply not have had time yet, so do not read this as a rejection.
+          stale-pr-message: >
+            No activity on this pull request for 45 days, so it is being marked
+            stale and will close in 14 days. Push a commit or leave a comment to
+            keep it open.
+          close-issue-message: >
+            Closing after 59 days without activity. Comment and it can be
+            reopened at any time.
+          close-pr-message: >
+            Closing after 59 days without activity. Reopen whenever you want to
+            pick it back up.

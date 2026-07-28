@@ -1,0 +1,10 @@
+# Default owner for everything in the repository.
+*                       @Prathamg042004
+
+# Trust boundaries and release machinery - never merge these unreviewed.
+/.github/               @Prathamg042004
+/.github/workflows/     @Prathamg042004
+/middleware.ts          @Prathamg042004
+/app/api/               @Prathamg042004
+/sdk/                   @Prathamg042004
+/SECURITY.md            @Prathamg042004

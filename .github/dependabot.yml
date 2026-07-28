@@ -1,22 +1,48 @@
 version: 2
+
 updates:
   - package-ecosystem: npm
     directory: "/"
     schedule:
       interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Etc/UTC
     open-pull-requests-limit: 5
+    versioning-strategy: increase
+    labels: ["dependencies"]
     commit-message:
-      prefix: chore
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
       include: scope
     groups:
+      # next, react and their types move together, so review them together.
+      framework:
+        patterns:
+          - "next"
+          - "react"
+          - "react-dom"
+          - "eslint-config-next"
+          - "@types/react"
+          - "@types/react-dom"
+      # Everything else that is patch or minor rides in a single PR that
+      # auto-merges once CI is green.
       minor-and-patch:
-        update-types:
-          - minor
-          - patch
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "github-actions"]
     commit-message:
-      prefix: ci
+      prefix: "ci(deps)"
+      include: scope
+    groups:
+      actions:
+        patterns: ["*"]
