@@ -43,9 +43,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # Advisory until the existing violations are fixed - tracked in issue #5.
-    # When that issue is closed: delete continue-on-error below and add "lint"
-    # to the needs list of the ci-ok job so it becomes a required gate.
-    continue-on-error: true
+    # When that issue is closed: drop the "|| echo" below and add "lint" to the
+    # needs list of the ci-ok job so it becomes a required gate.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -55,7 +54,8 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - run: npm ci
-      - run: npm run lint
+      - name: ESLint
+        run: npm run lint || echo "::warning::ESLint reported violations - see issue #5"
 
   test:
     name: Test (Node ${{ matrix.node }})
@@ -122,6 +122,10 @@ jobs:
         with:
           persist-credentials: false
       - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        # Needs the dependency graph enabled in Settings > Advanced Security.
+        # Until then this step warns instead of blocking; remove the line below
+        # once the setting is on so new advisories actually stop a merge.
+        continue-on-error: true
         with:
           fail-on-severity: high
           comment-summary-in-pr: on-failure
