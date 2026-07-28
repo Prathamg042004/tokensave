@@ -21,15 +21,28 @@ Never commit real credentials - `.env.local` is gitignored, keep it that way.
 ## Before opening a pull request
 
 ```bash
+npm run verify   # typecheck, lint, tests, production build
+```
+
+Or run the pieces individually:
+
+```bash
+npm run typecheck
 npm run lint
-npx tsc --noEmit
+npm test
 npm run build
 ```
 
-All three must pass. CI runs the same checks on every pull request.
+CI runs the same commands on every pull request. Typecheck, tests (Node 20 and
+22), the production build and the gitleaks secret scan are required; lint is
+still advisory until the existing violations are fixed.
 
-A test suite is being added (see the roadmap). Once `npm test` exists, new
-code will be expected to ship with tests.
+Tests live in `tests/` and use the built-in Node test runner, so there is no
+extra tooling to install. Coverage is thin today - the SDK helpers, the pricing
+table and the workflow policy. New logic is expected to ship with a test, and
+anything extracted out of the API route handlers should arrive with one.
+
+Pull request titles must follow Conventional Commits; a check enforces it.
 
 ## Commit messages
 
