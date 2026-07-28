@@ -1,18 +1,53 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Redis } from "@upstash/redis";
 
-export async function GET(req: any) {
-  const auth = req.headers.get("authorization");
-  if (!auth || !auth.startsWith("Bearer ts_live_")) {
-    return NextResponse.json({ error: "Auth required" }, { status: 401 });
-  }
+import { getRedis, requireApiKey } from "@/app/lib/auth";
+
+// Audit log reader.
+//
+// The previous version accepted any header that merely started with
+// "Bearer ts_live_", so an invented string was enough to read every account's
+// audit trail. The key is now verified against Redis and callers only ever see
+// the entries belonging to their own account.
+
+const MAX_ENTRIES = 100;
+const SCAN_DEPTH = 999;
+
+type AuditEntry = Record<string, unknown> & { userId?: string };
+
+function parseEntry(raw: unknown): AuditEntry | null {
+    try {
+          const value = typeof raw === "string" ? JSON.parse(raw) : raw;
+          return value && typeof value === "object" ? (value as AuditEntry) : null;
+    } catch {
+          return null;
+    }
+}
+
+export async function GET(req: NextRequest) {
+    const auth = await requireApiKey(req);
+    if (!auth.ok) {
+          return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+
+  const redis = getRedis();
+    if (!redis) {
+          return NextResponse.json({ service: "TokenSave Audit Log", total: 0, entries: [] });
+    }
+
   try {
-    const url = process.env.UPSTASH_REDIS_REST_URL;
-    const token = process.env.UPSTASH_REDIS_REST_TOKEN;
-    if (!url || !token) return NextResponse.json({ entries: [] });
-    const redis = new Redis({ url, token });
-    const logs = await redis.lrange("audit_log", 0, 99) || [];
-    const parsed = logs.map((l) => { try { return typeof l === "string" ? JSON.parse(l) : l; } catch { return l; } });
-    return NextResponse.json({ service: "TokenSave Audit Log", total: parsed.length, entries: parsed });
-  } catch (e:any) { return NextResponse.json({ error:e.message }, { status: 500 }); }
+        const raw = (await redis.lrange("audit_log", 0, SCAN_DEPTH)) || [];
+        const entries = raw
+          .map(parseEntry)
+          .filter((entry): entry is AuditEntry => entry !== null && entry.userId === auth.auth.userId)
+          .slice(0, MAX_ENTRIES);
+
+      return NextResponse.json({
+              service: "TokenSave Audit Log",
+              total: entries.length,
+              entries,
+      });
+  } catch {
+        // Never echo the raw error: it can carry the Redis connection string.
+      return NextResponse.json({ error: "Could not read the audit log right now" }, { status: 500 });
+  }
 }
