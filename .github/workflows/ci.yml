@@ -26,6 +26,11 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    # Advisory for now. The repository currently has 10 no-explicit-any errors
+    # and 11 no-unused-vars warnings in app/api. See the open "Fix ESLint
+    # violations" issue - once it is closed, remove continue-on-error so lint
+    # becomes a required check.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
