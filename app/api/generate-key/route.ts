@@ -1,58 +1,82 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Redis } from "@upstash/redis";
+import type { Redis } from "@upstash/redis";
 
-let redis: any = null;
-try {
-  redis = new Redis({
-    url: process.env.UPSTASH_REDIS_REST_URL || "",
-    token: process.env.UPSTASH_REDIS_REST_TOKEN || "",
-  });
-} catch (e) {}
+import { getRedis, requireSupabaseUser } from "@/app/lib/auth";
+import { generateApiKey, hashApiKey } from "@/lib/security.mjs";
 
-function generateKey(): string {
-  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
-  let key = "ts_live_";
-  for (let i = 0; i < 32; i++) {
-    key += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return key;
+// Issue and rotate TokenSave API keys.
+//
+// This endpoint used to accept a userId in the request body and return that
+// account's live key to anyone who asked, with keys built from Math.random().
+// Now the account comes from a verified Supabase session and keys come from the
+// platform CSPRNG.
+
+type Minted = { key: string; created: number };
+
+async function mintKey(
+  redis: Redis,
+  userId: string,
+  email: string,
+  rotated: boolean,
+): Promise<Minted> {
+  const key = generateApiKey();
+  const created = Date.now();
+  const record = { userId, email, created, rotated };
+
+  // user_key is what the dashboard reads back for display. key_hash is the index
+  // every authenticated request is checked against, so a lookup never needs the
+  // raw value.
+  await redis.set("user_key:" + userId, key);
+  await redis.set("key_hash:" + (await hashApiKey(key)), JSON.stringify(record));
+
+  return { key, created };
 }
 
 export async function POST(req: NextRequest) {
+  const session = await requireSupabaseUser(req);
+  if (!session.ok) {
+    return NextResponse.json({ error: session.error }, { status: session.status });
+  }
+
+  const redis = getRedis();
+  if (!redis) {
+    return NextResponse.json({ error: "Key storage is unavailable" }, { status: 503 });
+  }
+
+  const userId = session.auth.id;
+  const email = session.auth.email || "";
+
+  let action = "";
   try {
     const body = await req.json();
-    const { userId, email, action } = body;
+    if (body && typeof body.action === "string") action = body.action;
+  } catch {
+    // An empty body simply means "give me my current key".
+  }
 
-    if (!userId) {
-      return NextResponse.json({ error: "userId is required" }, { status: 400 });
-    }
-
-    if (!redis) {
-      return NextResponse.json({ error: "Storage unavailable" }, { status: 500 });
-    }
-
+  try {
     if (action === "rotate") {
-      const oldKey = await redis.get("user_key:" + userId);
-      if (oldKey) {
-        await redis.del("key_owner:" + oldKey);
+      const previous = await redis.get("user_key:" + userId);
+      if (typeof previous === "string" && previous.length > 0) {
+        // Revoke the old key everywhere it is indexed before minting a new one.
+        await Promise.all([
+          redis.del("key_owner:" + previous),
+          redis.del("key_hash:" + (await hashApiKey(previous))),
+        ]);
       }
-      const newKey = generateKey();
-      await redis.set("user_key:" + userId, newKey);
-      await redis.set("key_owner:" + newKey, JSON.stringify({ userId, email, created: Date.now(), rotated: true }));
-      return NextResponse.json({ key: newKey, rotated: true });
+      const minted = await mintKey(redis, userId, email, true);
+      return NextResponse.json({ key: minted.key, created: minted.created, rotated: true });
     }
 
     const existing = await redis.get("user_key:" + userId);
-    if (existing) {
+    if (typeof existing === "string" && existing.length > 0) {
       return NextResponse.json({ key: existing });
     }
 
-    const key = generateKey();
-    await redis.set("user_key:" + userId, key);
-    await redis.set("key_owner:" + key, JSON.stringify({ userId, email, created: Date.now() }));
-
-    return NextResponse.json({ key });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const minted = await mintKey(redis, userId, email, false);
+    return NextResponse.json({ key: minted.key, created: minted.created });
+  } catch {
+    // Never echo the raw error: it can carry connection strings.
+    return NextResponse.json({ error: "Could not issue a key right now" }, { status: 500 });
   }
 }
