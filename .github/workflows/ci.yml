@@ -106,9 +106,12 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # gitleaks runs from its pinned container image instead of the marketplace
+      # action: that action asks the GitHub API for the list of PR commits and the
+      # call intermittently returns HTTP 500, which made a required gate flaky.
+      - name: gitleaks (working tree)
+        run: |
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.24.3 dir /repo --redact --no-banner --exit-code 1
 
   dependency-review:
     name: Dependency review
