@@ -11,12 +11,12 @@
     "check": "echo 'Checking all endpoints...' && curl -s -o /dev/null -w '%{http_code}' https://tokensave.vercel.app && echo ' Landing: OK' && curl -s -o /dev/null -w '%{http_code}' https://tokensave.vercel.app/api/proxy && echo ' Proxy: OK' && curl -s -o /dev/null -w '%{http_code}' https://tokensave.vercel.app/api/health && echo ' Health: OK'"
   },
   "dependencies": {
-    "@sentry/nextjs": "^10.67.0",
-    "@supabase/supabase-js": "^2.107.0",
+    "@sentry/nextjs": "^10.68.0",
+    "@supabase/supabase-js": "^2.110.9",
     "@upstash/redis": "^1.38.0",
-    "next": "16.2.7",
-    "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "next": "16.2.12",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -24,7 +24,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.7",
+    "eslint-config-next": "16.2.12",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
