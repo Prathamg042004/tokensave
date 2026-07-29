@@ -1,518 +1,691 @@
-﻿import { NextRequest, NextResponse } from "next/server";
-import { Redis } from "@upstash/redis";
+import { NextRequest, NextResponse } from "next/server";
+import { authenticate, serverError } from "@/lib/auth";
+import { getRedis, parseJson, rSet, rGet, rateLimit } from "@/lib/redis";
+import { bucketIdFor } from "@/lib/keys";
+import { buildCacheKey, tenantOf } from "@/lib/cache";
+import { deliverWebhook } from "@/lib/ssrf";
 
-// Redis connection
-let redis: any = null;
-try {
-  const url = process.env.UPSTASH_REDIS_REST_URL || "";
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN || "";
-  if (url && token) redis = new Redis({ url, token });
-} catch (e) {}
+/**
+ * Optimisation proxy.
+ *
+ * Security changes in this pass:
+ *  - cache entries are namespaced per account and addressed by SHA-256 over
+ *    (tenant, provider, model, quality, messages) instead of a global 32-bit
+ *    hash of the prompt, which could collide into another caller's response
+ *  - the rate limit bucket is derived from a verified credential or a hashed
+ *    client IP, not from a caller-chosen "tsKey" string
+ *  - webhooks are delivered to the endpoint registered by the account and
+ *    validated by the SSRF guard, never to a URL supplied in the request
+ *  - the routed model is checked against a per-provider allowlist before it
+ *    reaches a provider URL, and Google credentials move to a header
+ *  - provider calls are time-boxed, and upstream error text is not echoed
+ */
 
-// Constants
-const CACHE_TTL = 1800;
+const CACHE_TTL_SECONDS = 1800;
 const RATE_LIMIT = 60;
-const RATE_WINDOW = 60;
+const RATE_WINDOW_SECONDS = 60;
 const MAX_BODY_SIZE = 500000;
 const MAX_MESSAGE_LENGTH = 100000;
 const MAX_MESSAGES = 100;
+const PROVIDER_TIMEOUT_MS = 60000;
 
-// Model pricing per million tokens [input, output]
 const PRICING: Record<string, [number, number]> = {
-  "claude-haiku-4-5-20251001": [0.80, 4.00],
-  "claude-sonnet-4-6": [3.00, 15.00],
-  "claude-opus-4-8": [15.00, 75.00],
-  "gpt-4o-mini": [0.15, 0.60],
-  "gpt-4o": [2.50, 10.00],
-  "gpt-4-turbo": [10.00, 30.00],
-  "gemini-2.0-flash-lite": [0.075, 0.30],
-  "gemini-2.0-flash": [0.15, 0.60],
-  "gemini-1.5-pro": [1.25, 5.00],
+  "claude-haiku-4-5-20251001": [0.8, 4.0],
+  "claude-sonnet-4-6": [3.0, 15.0],
+  "claude-opus-4-8": [15.0, 75.0],
+  "gpt-4o-mini": [0.15, 0.6],
+  "gpt-4o": [2.5, 10.0],
+  "gpt-4-turbo": [10.0, 30.0],
+  "gemini-2.0-flash-lite": [0.075, 0.3],
+  "gemini-2.0-flash": [0.15, 0.6],
+  "gemini-1.5-pro": [1.25, 5.0],
   "llama-3.1-8b-instant": [0.05, 0.08],
   "llama-3.3-70b-versatile": [0.59, 0.79],
   "mixtral-8x7b-32768": [0.24, 0.24],
   "deepseek-r1-distill-llama-70b": [0.75, 0.99],
 };
 
-// Safe Redis operations
-async function rGet(key: string): Promise<any> {
-  if (!redis) return null;
-  try { return await redis.get(key); } catch { return null; }
-}
+type ProviderName = "anthropic" | "openai" | "google" | "groq";
 
-async function rSet(key: string, value: any, ttl: number): Promise<void> {
-  if (!redis) return;
-  try { await redis.setex(key, ttl, JSON.stringify(value)); } catch {}
-}
+const PROVIDERS: Record<ProviderName, { simple: string; complex: string; premium: string; models: string[] }> = {
+  anthropic: {
+    simple: "claude-haiku-4-5-20251001",
+    complex: "claude-sonnet-4-6",
+    premium: "claude-opus-4-8",
+    models: ["claude-haiku-4-5-20251001", "claude-sonnet-4-6", "claude-opus-4-8"],
+  },
+  openai: {
+    simple: "gpt-4o-mini",
+    complex: "gpt-4o",
+    premium: "gpt-4-turbo",
+    models: ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo"],
+  },
+  google: {
+    simple: "gemini-2.0-flash-lite",
+    complex: "gemini-2.0-flash",
+    premium: "gemini-1.5-pro",
+    models: ["gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-1.5-pro"],
+  },
+  groq: {
+    simple: "llama-3.1-8b-instant",
+    complex: "llama-3.3-70b-versatile",
+    premium: "deepseek-r1-distill-llama-70b",
+    models: [
+      "llama-3.1-8b-instant",
+      "llama-3.3-70b-versatile",
+      "mixtral-8x7b-32768",
+      "deepseek-r1-distill-llama-70b",
+    ],
+  },
+};
 
-async function rIncr(key: string): Promise<number> {
-  if (!redis) return 0;
-  try { return await redis.incr(key); } catch { return 0; }
-}
+const PROVIDER_NAMES = Object.keys(PROVIDERS) as ProviderName[];
 
-async function rExpire(key: string, seconds: number): Promise<void> {
-  if (!redis) return;
-  try { await redis.expire(key, seconds); } catch {}
-}
+type Message = { role: string; content: string };
 
-async function logRequest(data: any): Promise<void> {
-  if (!redis) return;
-  try {
-    const entry = { ...data, timestamp: Date.now(), id: "req_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6) };
-    await redis.lpush("request_logs", JSON.stringify(entry));
-    await redis.ltrim("request_logs", 0, 999);
+type LogEntry = {
+  userId?: string | null;
+  provider?: string;
+  model?: string;
+  complexity?: string;
+  cache_hit?: boolean;
+  tokens_saved?: number;
+  latency?: number;
+  is_error?: boolean;
+  error_code?: number;
+  input_tokens?: number;
+  output_tokens?: number;
+  cost?: number;
+  cost_saved?: number;
+  fallback?: boolean;
+  original_provider?: string;
+  tags?: Record<string, string>;
+};
 
-    const today = new Date().toISOString().split("T")[0];
-    const key = "stats:" + today;
-    await redis.hincrby(key, "total_requests", 1);
-    await redis.hincrby(key, "tokens_saved", data.tokens_saved || 0);
-    await redis.hincrby(key, "cache_hits", data.cache_hit ? 1 : 0);
-    await redis.hincrby(key, "total_input_tokens", data.input_tokens || 0);
-    await redis.hincrby(key, "total_output_tokens", data.output_tokens || 0);
-    await redis.hincrby(key, "errors", data.is_error ? 1 : 0);
-
-    if (data.latency) {
-      await redis.lpush("latency_log", JSON.stringify({ latency: data.latency, timestamp: Date.now() }));
-      await redis.ltrim("latency_log", 0, 99);
-    }
-
-    const costMicro = Math.round((data.cost || 0) * 1000000);
-    if (costMicro > 0) await redis.hincrby(key, "total_cost_micro", costMicro);
-    const savedMicro = Math.round((data.cost_saved || 0) * 1000000);
-    if (savedMicro > 0) await redis.hincrby(key, "total_saved_micro", savedMicro);
-
-    if (data.userId) {
-      const userKey = "user_stats:" + data.userId + ":" + today;
-      await redis.hincrby(userKey, "requests", 1);
-      await redis.hincrby(userKey, "tokens_saved", data.tokens_saved || 0);
-    }
-
-    // Audit log
-    await redis.lpush("audit_log", JSON.stringify({
-      event: data.is_error ? "api_error" : "api_request",
-      timestamp: Date.now(),
-      provider: data.provider,
-      model: data.model,
-      cache_hit: data.cache_hit,
-      userId: data.userId,
-    }));
-    await redis.ltrim("audit_log", 0, 999);
-
-    // Webhook
-    if (data.webhookUrl) {
-      fetch(data.webhookUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ event: "request_completed", data: entry }),
-      }).catch(() => {});
-    }
-  } catch {}
-}
-
-// Helpers
 function estimateTokens(text: string): number {
   return Math.ceil((text || "").length / 4);
 }
 
 function calculateCost(model: string, inputTokens: number, outputTokens: number): number {
-  const p = PRICING[model] || [1, 5];
-  return (inputTokens * p[0] + outputTokens * p[1]) / 1000000;
+  const price = PRICING[model] || [1, 5];
+  return (inputTokens * price[0] + outputTokens * price[1]) / 1000000;
 }
 
-function getExpensiveModel(provider: string): string {
-  if (provider === "anthropic") return "claude-sonnet-4-6";
-  if (provider === "openai") return "gpt-4o";
-  if (provider === "groq") return "llama-3.3-70b-versatile";
-  return "gemini-2.0-flash";
+/** Prefers the provider's own usage accounting over a character estimate. */
+function outputTokensFrom(payload: unknown, fallbackText: string): number {
+  const data = payload as Record<string, any>;
+  const usage = data?.usage || data?.usageMetadata;
+  const reported =
+    usage?.output_tokens ?? usage?.completion_tokens ?? usage?.candidatesTokenCount ?? null;
+  if (typeof reported === "number" && reported > 0) return reported;
+  return estimateTokens(fallbackText);
 }
 
-function detectComplexity(messages: any[]): "simple" | "complex" {
-  const last = messages[messages.length - 1]?.content || "";
-  const words = last.split(" ").length;
-  const lower = last.toLowerCase();
+function inputTokensFrom(payload: unknown, messages: Message[]): number {
+  const data = payload as Record<string, any>;
+  const usage = data?.usage || data?.usageMetadata;
+  const reported = usage?.input_tokens ?? usage?.prompt_tokens ?? usage?.promptTokenCount ?? null;
+  if (typeof reported === "number" && reported > 0) return reported;
+  return messages.reduce((sum, message) => sum + estimateTokens(message.content), 0);
+}
 
-  const complexSignals = [
-    "analyze", "code", "debug", "write a function", "explain in detail",
-    "compare", "evaluate", "create a", "build", "design", "implement",
-    "refactor", "optimize", "algorithm", "architecture", "why does",
-    "how does", "implications", "pros and cons", "step by step",
-    "comprehensive", "write a program", "fix this", "review this",
-    "strategy", "philosophical", "mathematical", "write an essay",
-    "system design",
-  ];
+const COMPLEX_HINTS = [
+  "analyse",
+  "analyze",
+  "architecture",
+  "compare",
+  "debug",
+  "design",
+  "explain why",
+  "optimise",
+  "optimize",
+  "prove",
+  "refactor",
+  "step by step",
+  "strategy",
+  "trade-off",
+  "tradeoff",
+  "write code",
+];
 
-  const simpleSignals = [
-    "what is the capital", "what is the population", "define ",
-    "translate this", "what time", "convert ", "how many",
-    "what year", "who is the", "yes or no", "true or false",
-  ];
-
-  // Code syntax = always complex
-  if (last.includes("```") || last.includes("function ") || last.includes("def ") ||
-      last.includes("class ") || last.includes("import ") || last.includes("{") ||
-      last.includes("=>") || last.includes("SELECT ")) return "complex";
-
-  // Long conversations = complex
+function detectComplexity(messages: Message[]): "simple" | "complex" {
   if (messages.length > 6) return "complex";
 
-  // Keyword detection
-  if (complexSignals.some(k => lower.includes(k))) return "complex";
-  if (simpleSignals.some(k => lower.includes(k)) && words < 15) return "simple";
+  const last = messages[messages.length - 1]?.content ?? "";
+  const text = last.toLowerCase();
+  const words = text.trim().split(/\s+/).filter(Boolean).length;
 
-  // Length-based
   if (words > 80) return "complex";
-  if (words < 10) return "simple";
+  if (COMPLEX_HINTS.some((hint) => text.includes(hint))) return "complex";
+  if (words < 15) return "simple";
 
-  // Default: when unsure, protect quality
-  return words < 25 ? "simple" : "complex";
+  // When the signal is weak, route to the capable model.
+  return "complex";
 }
 
-function pickModel(complexity: "simple" | "complex", provider: string): string {
-  if (provider === "anthropic") return complexity === "simple" ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6";
-  if (provider === "openai") return complexity === "simple" ? "gpt-4o-mini" : "gpt-4o";
-  if (provider === "groq") return complexity === "simple" ? "llama-3.1-8b-instant" : "llama-3.3-70b-versatile";
-  return complexity === "simple" ? "gemini-2.0-flash-lite" : "gemini-2.0-flash";
+function pickModel(complexity: "simple" | "complex", provider: ProviderName): string {
+  return complexity === "simple" ? PROVIDERS[provider].simple : PROVIDERS[provider].complex;
 }
+
+const FILLERS = [
+  "to be honest with you",
+  "in my humble opinion",
+  "as you probably know",
+  "as you may already know",
+  "I would like to say that",
+  "what I want to say is",
+  "the thing is that",
+  "at the end of the day",
+  "for what it's worth",
+  "needless to say",
+  "it goes without saying",
+  "as a matter of fact",
+];
 
 function compressPrompt(text: string): { compressed: string; savedChars: number } {
-  if (text.length < 50) return { compressed: text, savedChars: 0 };
+  // Never rewrite prompts that carry code: collapsing whitespace there
+  // changes the meaning of the input.
+  if (text.includes("\u0060\u0060\u0060")) return { compressed: text, savedChars: 0 };
 
-  let c = text.replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
-  const fillers = [
-    "to be honest with you", "in my humble opinion", "as you probably know",
-    "as you may already know", "I would like to say that", "what I want to say is",
-    "the thing is that", "at the end of the day", "for what it's worth",
-    "needless to say", "it goes without saying", "as a matter of fact",
-  ];
-  for (const f of fillers) c = c.replace(new RegExp(f, "gi"), "");
-  c = c.replace(/\s+/g, " ").trim();
-
-  return { compressed: c, savedChars: text.length - c.length };
-}
-
-function getCacheKey(messages: any[]): string {
-  const raw = messages.map((m: any) => m.role + ":" + m.content).join("|");
-  let hash = 0;
-  for (let i = 0; i < raw.length; i++) {
-    hash = ((hash << 5) - hash) + raw.charCodeAt(i);
-    hash = hash & hash;
+  let out = text;
+  for (const filler of FILLERS) {
+    out = out.split(filler).join("");
+    out = out.split(filler.toLowerCase()).join("");
   }
-  return "cache:" + Math.abs(hash).toString(36);
+  // Collapse runs of spaces and tabs but keep line structure intact.
+  out = out.replace(/[ \t]{2,}/g, " ").replace(/[ \t]+$/gm, "").trim();
+
+  return { compressed: out, savedChars: Math.max(0, text.length - out.length) };
 }
 
-// Input validation
-function validateInput(body: any): string | null {
+function validateInput(body: Record<string, any>): string | null {
   if (!body.messages || !Array.isArray(body.messages) || body.messages.length === 0) {
     return "messages array is required and must not be empty";
   }
   if (body.messages.length > MAX_MESSAGES) {
     return "Maximum " + MAX_MESSAGES + " messages allowed";
   }
+
   for (let i = 0; i < body.messages.length; i++) {
-    const msg = body.messages[i];
-    if (!msg.role || !msg.content) return "messages[" + i + "] must have role and content";
-    if (!["user", "assistant", "system"].includes(msg.role)) return "messages[" + i + "].role must be user, assistant, or system";
-    if (typeof msg.content !== "string") return "messages[" + i + "].content must be a string";
-    if (msg.content.length > MAX_MESSAGE_LENGTH) return "messages[" + i + "].content exceeds 100K character limit";
+    const message = body.messages[i];
+    if (!message || typeof message !== "object") return "messages[" + i + "] must be an object";
+    if (typeof message.content !== "string") return "messages[" + i + "].content must be a string";
+    if (!message.role || !["user", "assistant", "system"].includes(message.role)) {
+      return "messages[" + i + "].role must be user, assistant, or system";
+    }
+    if (message.content.length > MAX_MESSAGE_LENGTH) {
+      return "messages[" + i + "].content exceeds the 100K character limit";
+    }
   }
-  if (!body.apiKey || typeof body.apiKey !== "string" || body.apiKey.length < 10) {
-    return "A valid apiKey is required";
+
+  if (typeof body.apiKey !== "string" || body.apiKey.length < 10 || body.apiKey.length > 500) {
+    return "A valid provider apiKey is required";
   }
-  if (body.apiKey.length > 500) return "apiKey is too long";
-  const validProviders = ["anthropic", "openai", "google", "groq"];
-  if (body.provider && !validProviders.includes(body.provider)) {
-    return "Invalid provider. Use: " + validProviders.join(", ");
+  if (body.provider && !PROVIDER_NAMES.includes(body.provider)) {
+    return "Invalid provider. Use: " + PROVIDER_NAMES.join(", ");
+  }
+  if (body.model !== undefined && typeof body.model !== "string") {
+    return "model must be a string";
+  }
+  if (body.quality !== undefined && !["auto", "max_savings", "max_quality"].includes(body.quality)) {
+    return "quality must be auto, max_savings or max_quality";
+  }
+  if (body.fallbackKeys !== undefined && (typeof body.fallbackKeys !== "object" || body.fallbackKeys === null)) {
+    return "fallbackKeys must be an object";
   }
   return null;
 }
 
-// Build provider request
-function buildProviderRequest(provider: string, model: string, apiKey: string, messages: any[]): { url: string; headers: any; body: any } {
+/**
+ * The model reaches a provider URL, so it is resolved against a fixed
+ * allowlist rather than interpolated from caller input.
+ */
+function resolveModel(provider: ProviderName, requested: unknown, complexity: "simple" | "complex", quality: string): string {
+  if (typeof requested === "string" && PROVIDERS[provider].models.includes(requested)) {
+    return requested;
+  }
+  if (quality === "max_quality") return PROVIDERS[provider].complex;
+  return pickModel(complexity, provider);
+}
+
+function buildProviderRequest(provider: ProviderName, model: string, apiKey: string, messages: Message[]) {
   if (provider === "anthropic") {
+    const system = messages.filter((m) => m.role === "system").map((m) => m.content).join("\n");
+    const turns = messages.filter((m) => m.role !== "system");
     return {
       url: "https://api.anthropic.com/v1/messages",
-      headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
-      body: { model, max_tokens: 1024, messages },
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: system
+        ? { model, max_tokens: 1024, system, messages: turns }
+        : { model, max_tokens: 1024, messages: turns },
     };
   }
+
   if (provider === "openai") {
     return {
       url: "https://api.openai.com/v1/chat/completions",
-      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + apiKey },
       body: { model, messages },
     };
   }
+
   if (provider === "groq") {
     return {
       url: "https://api.groq.com/openai/v1/chat/completions",
-      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + apiKey },
       body: { model, messages },
     };
   }
-  // Google
+
+  // Google. The credential goes in a header so it never lands in a URL,
+  // a proxy log or a referrer.
   return {
-    url: "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + apiKey,
-    headers: { "Content-Type": "application/json" },
-    body: { contents: messages.map((m: any) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })) },
+    url:
+      "https://generativelanguage.googleapis.com/v1beta/models/" +
+      encodeURIComponent(model) +
+      ":generateContent",
+    headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+    body: {
+      contents: messages
+        .filter((message) => message.role !== "system")
+        .map((message) => ({
+          role: message.role === "assistant" ? "model" : "user",
+          parts: [{ text: message.content }],
+        })),
+    },
   };
 }
 
-// POST handler
-export async function POST(req: NextRequest) {
-  const startTime = Date.now();
-  const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+async function callProvider(request: { url: string; headers: Record<string, string>; body: unknown }) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
+  try {
+    const response = await fetch(request.url, {
+      method: "POST",
+      headers: request.headers,
+      body: JSON.stringify(request.body),
+      redirect: "error",
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    const payload = await response.json().catch(() => ({}));
+    return { status: response.status, payload };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function logRequest(entry: LogEntry, webhookUrl: string | null): Promise<void> {
+  const redis = getRedis();
+  if (!redis) return;
+
+  const record = {
+    ...entry,
+    timestamp: Date.now(),
+    id: "req_" + Date.now().toString(36) + crypto.randomUUID().slice(0, 4),
+  };
 
   try {
-    // Request size check
+    await redis.lpush("request_logs", JSON.stringify(record));
+    await redis.ltrim("request_logs", 0, 999);
+
+    const today = new Date().toISOString().split("T")[0];
+    const deploymentKey = "stats:" + today;
+    await redis.hincrby(deploymentKey, "total_requests", 1);
+    await redis.hincrby(deploymentKey, "cache_hits", entry.cache_hit ? 1 : 0);
+    await redis.hincrby(deploymentKey, "errors", entry.is_error ? 1 : 0);
+
+    if (entry.userId) {
+      const accountKey = "user_stats:" + entry.userId + ":" + today;
+      await redis.hincrby(accountKey, "requests", 1);
+      await redis.hincrby(accountKey, "cache_hits", entry.cache_hit ? 1 : 0);
+      await redis.hincrby(accountKey, "errors", entry.is_error ? 1 : 0);
+      await redis.hincrby(accountKey, "tokens_saved", entry.tokens_saved || 0);
+      await redis.hincrby(accountKey, "input_tokens", entry.input_tokens || 0);
+      await redis.hincrby(accountKey, "output_tokens", entry.output_tokens || 0);
+      await redis.hincrby(accountKey, "cost_micro", Math.round((entry.cost || 0) * 1000000));
+      await redis.hincrby(accountKey, "saved_micro", Math.round((entry.cost_saved || 0) * 1000000));
+      await redis.expire(accountKey, 60 * 60 * 24 * 40);
+    }
+
+    if (entry.latency) {
+      await redis.lpush("latency_log", JSON.stringify({ latency: entry.latency, timestamp: Date.now() }));
+      await redis.ltrim("latency_log", 0, 99);
+    }
+
+    await redis.lpush(
+      "audit_log",
+      JSON.stringify({
+        event: entry.is_error ? "api_error" : "api_request",
+        timestamp: Date.now(),
+        provider: entry.provider,
+        model: entry.model,
+        cache_hit: Boolean(entry.cache_hit),
+        userId: entry.userId ?? null,
+      })
+    );
+    await redis.ltrim("audit_log", 0, 999);
+  } catch {
+    /* telemetry must never break a request */
+  }
+
+  if (webhookUrl) {
+    // Validated destination, no redirects, time-boxed.
+    void deliverWebhook(webhookUrl, { event: "request_completed", data: record });
+  }
+}
+
+async function registeredWebhookFor(userId: string | null): Promise<string | null> {
+  if (!userId) return null;
+  const stored = parseJson<{ url?: string; active?: boolean }>(await rGet("webhook:" + userId));
+  if (!stored?.url || stored.active === false) return null;
+  return stored.url;
+}
+
+export async function POST(req: NextRequest) {
+  const startedAt = Date.now();
+
+  try {
     const contentLength = req.headers.get("content-length");
-    if (contentLength && parseInt(contentLength) > MAX_BODY_SIZE) {
+    if (contentLength && Number.parseInt(contentLength, 10) > MAX_BODY_SIZE) {
       return NextResponse.json({ error: "Request too large. Maximum 500KB." }, { status: 413 });
     }
 
-    const body = await req.json();
+    let body: Record<string, any>;
+    try {
+      body = (await req.json()) as Record<string, any>;
+    } catch {
+      return NextResponse.json({ error: "A JSON body is required" }, { status: 400 });
+    }
 
-    // Validate input
     const validationError = validateInput(body);
     if (validationError) {
       return NextResponse.json({ error: validationError }, { status: 400 });
     }
 
-    const {
-      messages,
-      provider = "anthropic",
-      apiKey,
-      model: requestedModel,
-      quality = "auto",
-      fallbackKeys = {},
-      tags = {},
-      userId,
-      webhookUrl,
-    } = body;
+    // A tsKey, when present, must be a real credential. Previously any string
+    // was accepted and simply became the rate limit bucket, so the limit could
+    // be reset at will and requests could be attributed to another account.
+    const identity = await authenticate(req);
+    let caller = identity;
+    if (!caller && typeof body.tsKey === "string" && body.tsKey.length > 0) {
+      const { verifyApiKey } = await import("@/lib/auth");
+      caller = await verifyApiKey(body.tsKey);
+      if (!caller) {
+        return NextResponse.json({ error: "Invalid TokenSave key" }, { status: 401 });
+      }
+    }
 
-    // Rate limiting
-    const rateLimitId = body.tsKey || clientIp;
-    const rlCount = await rIncr("rl:" + rateLimitId);
-    if (rlCount === 1) await rExpire("rl:" + rateLimitId, RATE_WINDOW);
+    const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+    const bucket = caller ? "account:" + caller.userId : "ip:" + (await bucketIdFor(clientIp));
+    const limit = await rateLimit("proxy:" + bucket, RATE_LIMIT, RATE_WINDOW_SECONDS);
 
-    if (rlCount > RATE_LIMIT) {
-      await logRequest({ is_error: true, provider, latency: Date.now() - startTime, userId, error_message: "Rate limit exceeded" });
+    const rateHeaders = {
+      "X-RateLimit-Limit": String(RATE_LIMIT),
+      "X-RateLimit-Remaining": String(limit.remaining),
+    };
+
+    if (!limit.allowed) {
+      await logRequest(
+        { is_error: true, provider: body.provider, latency: Date.now() - startedAt, userId: caller?.userId ?? null },
+        null
+      );
       return NextResponse.json(
         { error: "Rate limit exceeded. Maximum " + RATE_LIMIT + " requests per minute." },
-        { status: 429, headers: { "X-RateLimit-Remaining": "0", "X-RateLimit-Limit": String(RATE_LIMIT), "Retry-After": String(RATE_WINDOW) } }
+        { status: 429, headers: { ...rateHeaders, "Retry-After": String(RATE_WINDOW_SECONDS) } }
       );
     }
 
-    // Sanitize tags
+    const provider: ProviderName = (body.provider as ProviderName) || "anthropic";
+    const quality: string = body.quality || "auto";
+    const apiKey: string = body.apiKey;
+    const webhookUrl = await registeredWebhookFor(caller?.userId ?? null);
+
     const cleanTags: Record<string, string> = {};
-    if (tags && typeof tags === "object") {
-      for (const [k, v] of Object.entries(tags).slice(0, 20)) {
-        if (typeof k === "string" && typeof v === "string") {
-          cleanTags[k.slice(0, 50)] = String(v).slice(0, 200);
+    if (body.tags && typeof body.tags === "object") {
+      for (const [key, value] of Object.entries(body.tags).slice(0, 20)) {
+        if (typeof key === "string" && typeof value === "string") {
+          cleanTags[key.slice(0, 50)] = value.slice(0, 200);
         }
       }
     }
 
-    // Strip control characters from messages
-    const cleanMessages = messages.map((m: any) => ({
-      role: m.role,
-      content: m.content.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ""),
+    const cleanMessages: Message[] = (body.messages as Message[]).map((message) => ({
+      role: message.role,
+      content: message.content.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ""),
     }));
 
-    // Check cache
-    const cacheKey = getCacheKey(cleanMessages);
-    const cached = await rGet(cacheKey);
+    const complexity = detectComplexity(cleanMessages);
+    const model = resolveModel(provider, body.model, complexity, quality);
+
+    const tenant = tenantOf(caller);
+    const cacheKey = await buildCacheKey({ tenant, provider, model, quality, messages: cleanMessages });
+    const cached = await rGet<unknown>(cacheKey);
 
     if (cached) {
-      const latency = Date.now() - startTime;
-      await logRequest({ cache_hit: true, tokens_saved: 500, provider, model: "cached", latency, userId, tags: cleanTags, is_error: false, cost: 0, cost_saved: 0.001, webhookUrl });
-      const cachedData = typeof cached === "string" ? JSON.parse(cached) : cached;
-      return NextResponse.json({
-        ...cachedData,
-        tokensave_meta: {
-          request_id: "req_" + Date.now().toString(36),
+      const cachedPayload = typeof cached === "string" ? JSON.parse(cached) : cached;
+      const latency = Date.now() - startedAt;
+      const savedTokens = outputTokensFrom(cachedPayload, JSON.stringify(cachedPayload));
+
+      await logRequest(
+        {
           cache_hit: true,
-          tokens_saved: "100%",
-          method: "cache",
-          quality_mode: quality,
-          latency_ms: latency,
-          cost: 0,
+          tokens_saved: savedTokens,
+          provider,
+          model,
+          latency,
+          userId: caller?.userId ?? null,
           tags: cleanTags,
+          is_error: false,
+          cost: 0,
+          cost_saved: calculateCost(model, 0, savedTokens),
         },
-      }, {
-        headers: { "X-RateLimit-Remaining": String(Math.max(0, RATE_LIMIT - rlCount)), "X-RateLimit-Limit": String(RATE_LIMIT) },
-      });
+        webhookUrl
+      );
+
+      return NextResponse.json(
+        {
+          ...cachedPayload,
+          tokensave_meta: {
+            request_id: "req_" + Date.now().toString(36),
+            cache_hit: true,
+            model_used: model,
+            method: "cache",
+            quality_mode: quality,
+            latency_ms: latency,
+            cost: 0,
+            tokens_saved: savedTokens,
+            tags: cleanTags,
+          },
+        },
+        { headers: rateHeaders }
+      );
     }
 
-    // Detect complexity and pick model
-    const complexity = detectComplexity(cleanMessages);
-    const model = requestedModel || (quality === "max_quality" ? pickModel("complex", provider) : pickModel(complexity, provider));
-
-    // Compress prompt
-    let optimizedMessages = cleanMessages;
+    let optimisedMessages = cleanMessages;
     let savedChars = 0;
-    if (quality !== "max_quality") {
-      const lastMsg = cleanMessages[cleanMessages.length - 1];
-      const result = compressPrompt(lastMsg.content);
+    if (quality !== "max_quality" && cleanMessages.length > 0) {
+      const last = cleanMessages[cleanMessages.length - 1];
+      const result = compressPrompt(last.content);
       savedChars = result.savedChars;
       if (savedChars > 0) {
-        optimizedMessages = [...cleanMessages.slice(0, -1), { ...lastMsg, content: result.compressed }];
+        optimisedMessages = [...cleanMessages.slice(0, -1), { ...last, content: result.compressed }];
       }
     }
 
-    const inputTokens = optimizedMessages.reduce((sum: number, m: any) => sum + estimateTokens(m.content), 0);
+    const primary = await callProvider(buildProviderRequest(provider, model, apiKey, optimisedMessages));
 
-    // Build and send request
-    const { url: apiUrl, headers, body: apiBody } = buildProviderRequest(provider, model, apiKey, optimizedMessages);
-    const aiResponse = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify(apiBody) });
-    const aiData = await aiResponse.json();
-    const latency = Date.now() - startTime;
+    if (primary.status >= 400) {
+      const upstream = primary.payload as Record<string, any>;
+      const upstreamMessage = String(upstream?.error?.message || "");
+      const isRateLimited =
+        primary.status === 429 || /rate|quota|limit|exhausted/i.test(upstreamMessage);
 
-    // Handle provider errors
-    if (aiResponse.status >= 400) {
-      const isRateLimit = aiResponse.status === 429 ||
-        (aiData.error?.message || "").toLowerCase().match(/rate|quota|limit|exhausted/);
+      if (isRateLimited && body.fallbackKeys && typeof body.fallbackKeys === "object") {
+        for (const candidate of PROVIDER_NAMES.filter((name) => name !== provider)) {
+          const fallbackKey = (body.fallbackKeys as Record<string, unknown>)[candidate];
+          if (typeof fallbackKey !== "string" || fallbackKey.length < 10) continue;
 
-      // Try fallback if rate limited
-      if (isRateLimit) {
-        const fallbackOrder = ["groq", "anthropic", "openai", "google"].filter(p => p !== provider);
-
-        for (const fbProvider of fallbackOrder) {
-          const fbKey = fallbackKeys[fbProvider];
-          if (!fbKey) continue;
-
+          const fallbackModel = pickModel(complexity, candidate);
+          let fallback;
           try {
-            const fbModel = pickModel(complexity, fbProvider);
-            const { url: fbUrl, headers: fbHeaders, body: fbBody } = buildProviderRequest(fbProvider, fbModel, fbKey, optimizedMessages);
-            const fbResponse = await fetch(fbUrl, { method: "POST", headers: fbHeaders, body: JSON.stringify(fbBody) });
+            fallback = await callProvider(
+              buildProviderRequest(candidate, fallbackModel, fallbackKey, optimisedMessages)
+            );
+          } catch {
+            continue;
+          }
+          if (fallback.status >= 400) continue;
 
-            if (fbResponse.status < 400) {
-              const fbData = await fbResponse.json();
-              const fbLatency = Date.now() - startTime;
-              const outputTokens = estimateTokens(JSON.stringify(fbData).slice(0, 2000));
-              const cost = calculateCost(fbModel, inputTokens, outputTokens);
-              const costWithout = calculateCost(getExpensiveModel(fbProvider), inputTokens, outputTokens);
+          const latency = Date.now() - startedAt;
+          const inputTokens = inputTokensFrom(fallback.payload, optimisedMessages);
+          const outputTokens = outputTokensFrom(fallback.payload, JSON.stringify(fallback.payload));
+          const cost = calculateCost(fallbackModel, inputTokens, outputTokens);
+          const premiumCost = calculateCost(PROVIDERS[candidate].premium, inputTokens, outputTokens);
 
-              await rSet(cacheKey, fbData, CACHE_TTL);
-              await logRequest({
-                cache_hit: false, tokens_saved: savedChars, provider: fbProvider, model: fbModel,
-                complexity, latency: fbLatency, userId, tags: cleanTags, is_error: false,
-                input_tokens: inputTokens, output_tokens: outputTokens,
-                cost, cost_saved: costWithout - cost, fallback: true, original_provider: provider, webhookUrl,
-              });
+          const fallbackCacheKey = await buildCacheKey({
+            tenant,
+            provider: candidate,
+            model: fallbackModel,
+            quality,
+            messages: cleanMessages,
+          });
+          await rSet(fallbackCacheKey, fallback.payload, CACHE_TTL_SECONDS);
 
-              return NextResponse.json({
-                ...fbData,
-                tokensave_meta: {
-                  request_id: "req_" + Date.now().toString(36),
-                  cache_hit: false, model_used: fbModel, complexity, chars_saved: savedChars,
-                  quality_mode: quality, method: "fallback", latency_ms: fbLatency,
-                  original_provider: provider, fallback_provider: fbProvider,
-                  cost, cost_without_optimization: costWithout,
-                  savings_percent: Math.round(((costWithout - cost) / costWithout) * 100),
-                  input_tokens: inputTokens, output_tokens: outputTokens, tags: cleanTags,
-                },
-              }, {
-                headers: { "X-RateLimit-Remaining": String(Math.max(0, RATE_LIMIT - rlCount)), "X-RateLimit-Limit": String(RATE_LIMIT) },
-              });
-            }
-          } catch { continue; }
+          await logRequest(
+            {
+              cache_hit: false,
+              tokens_saved: savedChars,
+              provider: candidate,
+              model: fallbackModel,
+              complexity,
+              latency,
+              userId: caller?.userId ?? null,
+              tags: cleanTags,
+              is_error: false,
+              input_tokens: inputTokens,
+              output_tokens: outputTokens,
+              cost,
+              cost_saved: Math.max(0, premiumCost - cost),
+              fallback: true,
+              original_provider: provider,
+            },
+            webhookUrl
+          );
+
+          return NextResponse.json(
+            {
+              ...(fallback.payload as object),
+              tokensave_meta: {
+                request_id: "req_" + Date.now().toString(36),
+                cache_hit: false,
+                model_used: fallbackModel,
+                complexity,
+                chars_saved: savedChars,
+                quality_mode: quality,
+                method: "fallback",
+                latency_ms: latency,
+                original_provider: provider,
+                fallback_provider: candidate,
+                cost,
+                cost_without_optimization: premiumCost,
+                input_tokens: inputTokens,
+                output_tokens: outputTokens,
+                tags: cleanTags,
+              },
+            },
+            { headers: rateHeaders }
+          );
         }
       }
 
-      // No fallback worked, return error
-      await logRequest({
-        cache_hit: false, provider, model, complexity, latency, userId, tags: cleanTags,
-        is_error: true, error_code: aiResponse.status, error_message: aiData.error?.message || "Unknown", webhookUrl,
-      });
-
-      return NextResponse.json({
-        error: aiData.error,
-        tokensave_meta: {
-          request_id: "req_" + Date.now().toString(36),
-          cache_hit: false, model_used: model, complexity, chars_saved: savedChars,
-          quality_mode: quality, latency_ms: latency, is_error: true, tags: cleanTags,
-          note: "Error from " + provider + "." + (isRateLimit ? " Add fallbackKeys for auto-switching." : ""),
+      await logRequest(
+        {
+          is_error: true,
+          error_code: primary.status,
+          provider,
+          model,
+          latency: Date.now() - startedAt,
+          userId: caller?.userId ?? null,
+          tags: cleanTags,
         },
-      }, { status: aiResponse.status });
+        webhookUrl
+      );
+
+      // The upstream body can carry account identifiers, so only the status
+      // and a stable summary are returned.
+      return NextResponse.json(
+        {
+          error: "The upstream provider rejected this request",
+          provider,
+          upstream_status: primary.status,
+        },
+        { status: primary.status === 429 ? 429 : 502, headers: rateHeaders }
+      );
     }
 
-    // Success — cache and return
-    const outputTokens = estimateTokens(JSON.stringify(aiData).slice(0, 2000));
+    const latency = Date.now() - startedAt;
+    const inputTokens = inputTokensFrom(primary.payload, optimisedMessages);
+    const outputTokens = outputTokensFrom(primary.payload, JSON.stringify(primary.payload));
     const cost = calculateCost(model, inputTokens, outputTokens);
-    const costWithout = calculateCost(getExpensiveModel(provider), inputTokens, outputTokens);
+    const premiumCost = calculateCost(PROVIDERS[provider].premium, inputTokens, outputTokens);
 
-    await rSet(cacheKey, aiData, CACHE_TTL);
-    await logRequest({
-      cache_hit: false, tokens_saved: savedChars, provider, model, complexity, latency,
-      userId, tags: cleanTags, is_error: false, input_tokens: inputTokens, output_tokens: outputTokens,
-      cost, cost_saved: costWithout - cost, webhookUrl,
-    });
+    await rSet(cacheKey, primary.payload, CACHE_TTL_SECONDS);
 
-    return NextResponse.json({
-      ...aiData,
-      tokensave_meta: {
-        request_id: "req_" + Date.now().toString(36),
-        cache_hit: false, model_used: model, complexity, chars_saved: savedChars,
-        quality_mode: quality, latency_ms: latency,
-        method: complexity === "simple" ? "routed_to_cheap" : "routed_to_smart",
-        cost, cost_without_optimization: costWithout,
-        savings_percent: Math.round(((costWithout - cost) / costWithout) * 100),
-        input_tokens: inputTokens, output_tokens: outputTokens, tags: cleanTags,
+    await logRequest(
+      {
+        cache_hit: false,
+        tokens_saved: savedChars,
+        provider,
+        model,
+        complexity,
+        latency,
+        userId: caller?.userId ?? null,
+        tags: cleanTags,
+        is_error: false,
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
+        cost,
+        cost_saved: Math.max(0, premiumCost - cost),
       },
-    }, {
-      headers: { "X-RateLimit-Remaining": String(Math.max(0, RATE_LIMIT - rlCount)), "X-RateLimit-Limit": String(RATE_LIMIT) },
-    });
+      webhookUrl
+    );
 
-  } catch (error: any) {
-    const latency = Date.now() - startTime;
-    await logRequest({ is_error: true, error_message: error.message, latency });
-    return NextResponse.json({ error: "TokenSave proxy error: " + error.message }, { status: 500 });
+    return NextResponse.json(
+      {
+        ...(primary.payload as object),
+        tokensave_meta: {
+          request_id: "req_" + Date.now().toString(36),
+          cache_hit: false,
+          model_used: model,
+          complexity,
+          chars_saved: savedChars,
+          quality_mode: quality,
+          method: "direct",
+          latency_ms: latency,
+          cost,
+          cost_without_optimization: premiumCost,
+          input_tokens: inputTokens,
+          output_tokens: outputTokens,
+          tags: cleanTags,
+        },
+      },
+      { headers: rateHeaders }
+    );
+  } catch (error) {
+    return serverError("proxy", error);
   }
 }
 
-// GET handler
 export async function GET() {
   return NextResponse.json({
-    status: "active",
-    service: "TokenSave API Proxy",
-    version: "3.1.0",
-    docs: "https://tokensave.vercel.app/docs",
-    security: "https://tokensave.vercel.app/security",
-    changelog: "https://tokensave.vercel.app/changelog",
-    health: "https://tokensave.vercel.app/api/health",
-    providers: ["anthropic", "openai", "google", "groq"],
-    supported_models: Object.keys(PRICING),
-    quality_modes: {
-      auto: "Smart routing — defaults to quality when unsure (recommended)",
-      max_savings: "Aggressive cost optimization",
-      max_quality: "Best model only — cache is the only optimization",
-    },
-    rate_limit: RATE_LIMIT + " requests/minute",
-    features: [
-      "Semantic caching with 30-minute TTL",
-      "Smart model routing by complexity",
-      "Safe prompt compression",
-      "Multi-provider automatic fallback",
-      "Real per-token cost tracking",
-      "Latency monitoring (avg + P95)",
-      "Custom request tags",
-      "Webhook notifications",
-      "Per-user analytics",
-      "Quality modes (auto/max_savings/max_quality)",
-      "Rate limiting with headers",
-      "Input validation and sanitization",
-      "Security audit logging",
-    ],
-    endpoints: {
-      proxy: { method: "POST", url: "https://tokensave.vercel.app/api/proxy" },
-      batch: { method: "POST", url: "https://tokensave.vercel.app/api/batch" },
-      smart_context: { method: "POST", url: "https://tokensave.vercel.app/api/smart-context" },
-      trim_context: { method: "POST", url: "https://tokensave.vercel.app/api/trim-context" },
-      stats: { method: "GET", url: "https://tokensave.vercel.app/api/stats" },
-      health: { method: "GET", url: "https://tokensave.vercel.app/api/health" },
-      teams: { method: "POST", url: "https://tokensave.vercel.app/api/teams" },
-      webhooks: { method: "POST", url: "https://tokensave.vercel.app/api/webhooks" },
-      audit: { method: "GET", url: "https://tokensave.vercel.app/api/audit" },
-    },
+    service: "TokenSave Proxy",
+    method: "POST",
+    authentication: "Optional Bearer credential. Anonymous callers share a cache namespace and an IP rate limit.",
+    providers: PROVIDER_NAMES,
   });
 }
