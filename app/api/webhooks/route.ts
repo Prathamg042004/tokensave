@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Redis } from "@upstash/redis";
+import { isSafeOutboundUrl, safeFetch, rejectUnsafeUrl } from "@/lib/ssrf-guard";
 
 let redis: any = null;
 try {
@@ -18,6 +19,7 @@ export async function POST(req: NextRequest) {
 
     if (action === "create") {
       if (!webhookUrl) return NextResponse.json({ error: "webhookUrl required" }, { status: 400 });
+      if (!isSafeOutboundUrl(webhookUrl)) return rejectUnsafeUrl();
       const webhook = {
         id: "wh_" + Date.now().toString(36),
         url: webhookUrl,
@@ -38,12 +40,14 @@ export async function POST(req: NextRequest) {
 
     if (action === "test") {
       if (!webhookUrl) return NextResponse.json({ error: "webhookUrl required" }, { status: 400 });
+      if (!isSafeOutboundUrl(webhookUrl)) return rejectUnsafeUrl();
       try {
-        const testRes = await fetch(webhookUrl, {
+        const testRes = await safeFetch(webhookUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ event: "test", message: "TokenSave webhook test successful", timestamp: Date.now() }),
         });
+        if (!testRes) return rejectUnsafeUrl();
         return NextResponse.json({ success: testRes.ok, status: testRes.status });
       } catch (e: any) {
         return NextResponse.json({ success: false, error: e.message });
