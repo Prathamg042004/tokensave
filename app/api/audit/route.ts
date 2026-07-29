@@ -1,18 +1,64 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Redis } from "@upstash/redis";
+import { authenticate, serverError, unauthorized } from "@/lib/auth";
+import { getRedis, parseJson } from "@/lib/redis";
 
-export async function GET(req: any) {
-  const auth = req.headers.get("authorization");
-  if (!auth || !auth.startsWith("Bearer ts_live_")) {
-    return NextResponse.json({ error: "Auth required" }, { status: 401 });
-  }
+/**
+ * Audit log.
+ *
+ * The previous check accepted any Authorization header that merely started
+ * with "Bearer ts_live_", so any string in that shape read the global log.
+ * The credential is now verified and entries are scoped to their owner.
+ */
+
+const MAX_ENTRIES = 100;
+
+type AuditEntry = {
+  event?: string;
+  timestamp?: number;
+  provider?: string;
+  model?: string;
+  cache_hit?: boolean;
+  userId?: string;
+};
+
+function operatorIds(): string[] {
+  return (process.env.AUDIT_OPERATOR_USER_IDS || "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+}
+
+export async function GET(req: NextRequest) {
+  const identity = await authenticate(req);
+  if (!identity) return unauthorized();
+
   try {
-    const url = process.env.UPSTASH_REDIS_REST_URL;
-    const token = process.env.UPSTASH_REDIS_REST_TOKEN;
-    if (!url || !token) return NextResponse.json({ entries: [] });
-    const redis = new Redis({ url, token });
-    const logs = await redis.lrange("audit_log", 0, 99) || [];
-    const parsed = logs.map((l) => { try { return typeof l === "string" ? JSON.parse(l) : l; } catch { return l; } });
-    return NextResponse.json({ service: "TokenSave Audit Log", total: parsed.length, entries: parsed });
-  } catch (e:any) { return NextResponse.json({ error:e.message }, { status: 500 }); }
+    const redis = getRedis();
+    if (!redis) return NextResponse.json({ service: "TokenSave Audit Log", total: 0, entries: [] });
+
+    const raw = (await redis.lrange("audit_log", 0, 999)) || [];
+    const isOperator = operatorIds().includes(identity.userId);
+
+    const entries = raw
+      .map((line) => parseJson<AuditEntry>(line))
+      .filter((entry): entry is AuditEntry => entry !== null)
+      .filter((entry) => isOperator || entry.userId === identity.userId)
+      .slice(0, MAX_ENTRIES)
+      .map((entry) => ({
+        event: entry.event,
+        timestamp: entry.timestamp,
+        provider: entry.provider,
+        model: entry.model,
+        cache_hit: entry.cache_hit,
+      }));
+
+    return NextResponse.json({
+      service: "TokenSave Audit Log",
+      scope: isOperator ? "deployment" : "account",
+      total: entries.length,
+      entries,
+    });
+  } catch (error) {
+    return serverError("audit", error);
+  }
 }
