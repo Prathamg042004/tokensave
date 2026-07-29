@@ -1,8 +1,25 @@
-﻿"use client";
+"use client";
 import { useState, useEffect, useRef, ReactNode } from "react";
 import { supabase } from "../supabase";
 import { useRouter } from "next/navigation";
 import { ProviderLogo } from "../icons";
+
+// Attaches the signed-in user's Supabase access token to dashboard API calls.
+// The API routes no longer trust a userId sent in the body.
+function fetchWithAuth(input: string, init: RequestInit = {}) {
+  return supabase.auth.getSession().then(({ data }) => {
+    const accessToken = data.session?.access_token;
+    return fetch(input, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(init.headers as Record<string, string> | undefined),
+        ...(accessToken ? { Authorization: "Bearer " + accessToken } : {}),
+      },
+    });
+  });
+}
+
 
 // Animations
 function useInView(threshold = 0.15) {
@@ -96,24 +113,26 @@ function Skeleton({ w = "100%", h = 20 }: { w?: string | number; h?: number }) {
 
 // Key Manager
 function KeyManager({ userId, email }: { userId: string; email: string }) {
-  const [key, setKey] = useState(""); const [copied, setCopied] = useState(false); const [show, setShow] = useState(false); const [confirmR, setConfirmR] = useState(false); const [msg, setMsg] = useState("");
-  useEffect(() => { if (userId) fetch("/api/generate-key", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId, email }) }).then(r => r.json()).then(d => { if (d.key) setKey(d.key); }).catch(() => {}); }, [userId, email]);
-  if (!key) return <div className="space-y-2"><Skeleton h={48} /><Skeleton w="60%" h={12} /></div>;
-  return (
-    <div>
-      <div className="flex gap-2">
-        <div className="flex-1 bg-[#0A0D12] border border-white/[0.06] rounded-xl px-4 py-3 font-mono text-[#5B8DEF] text-[13px] truncate">{show ? key : key.slice(0, 12) + "•".repeat(16) + key.slice(-4)}</div>
-        <button onClick={() => setShow(!show)} className="px-3 py-2 bg-white/[0.03] hover:bg-white/[0.06] rounded-xl text-[11px] text-[#5A6577] transition-colors">{show ? "Hide" : "Show"}</button>
-        <button onClick={() => { navigator.clipboard.writeText(key); setCopied(true); setTimeout(() => setCopied(false), 1500); }} className="px-3 py-2 bg-white/[0.03] hover:bg-white/[0.06] rounded-xl text-[11px] text-[#5A6577] transition-colors">{copied ? "✓" : "Copy"}</button>
-      </div>
-      <div className="flex justify-between mt-2">
-        <span className="text-[10px] text-[#3D4654]">Include as <code className="text-[#5A6577]">tsKey</code> in requests</span>
-        {!confirmR ? <button onClick={() => setConfirmR(true)} className="text-[10px] text-[#3D4654] hover:text-[#FF5F57] transition-colors">Rotate</button>
-        : <div className="flex gap-2"><button onClick={async () => { const r = await fetch("/api/generate-key", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId, email, action: "rotate" }) }).then(r => r.json()); if (r.key) { setKey(r.key); setMsg("Rotated!"); setTimeout(() => setMsg(""), 3000); } setConfirmR(false); }} className="text-[10px] text-[#FF5F57]">Confirm</button><button onClick={() => setConfirmR(false)} className="text-[10px] text-[#3D4654]">Cancel</button></div>}
-      </div>
-      {msg && <p className="text-[#E8B94B] text-[10px] mt-1">{msg}</p>}
-    </div>
-  );
+const [key, setKey] = useState(""); const [preview, setPreview] = useState(""); const [loading, setLoading] = useState(true); const [copied, setCopied] = useState(false); const [show, setShow] = useState(false); const [confirmR, setConfirmR] = useState(false); const [msg, setMsg] = useState("");
+useEffect(() => { if (!userId) return; fetchWithAuth("/api/generate-key", { method: "POST", body: JSON.stringify({ action: "create" }) }).then(r => r.json()).then(d => { if (d.key) setKey(d.key); if (d.preview) setPreview(d.preview); }).catch(() => {}).finally(() => setLoading(false)); }, [userId, email]);
+if (loading) return <div className="space-y-2"><Skeleton h={48} /><Skeleton w="60%" h={12} /></div>;
+const display = key || preview;
+if (!display) return <p className="text-[11px] text-[#5A6577]">No key yet. Use Rotate to issue one.</p>;
+return (
+<div>
+<div className="flex gap-2">
+<div className="flex-1 bg-[#0A0D12] border border-white/[0.06] rounded-xl px-4 py-3 font-mono text-[#5B8DEF] text-[13px] truncate">{key && show ? key : display}</div>
+{key && <button onClick={() => setShow(!show)} className="px-3 py-2 bg-white/[0.03] hover:bg-white/[0.06] rounded-xl text-[11px] text-[#5A6577] transition-colors">{show ? "Hide" : "Show"}</button>}
+{key && <button onClick={() => { navigator.clipboard.writeText(key); setCopied(true); setTimeout(() => setCopied(false), 1500); }} className="px-3 py-2 bg-white/[0.03] hover:bg-white/[0.06] rounded-xl text-[11px] text-[#5A6577] transition-colors">{copied ? "✓" : "Copy"}</button>}
+</div>
+<div className="flex justify-between mt-2">
+<span className="text-[10px] text-[#3D4654]">{key ? "Copy it now — only a hash is stored, so it cannot be shown again" : "Only a hash of your key is stored. Rotate to issue a new one."}</span>
+{!confirmR ? <button onClick={() => setConfirmR(true)} className="text-[10px] text-[#3D4654] hover:text-[#FF5F57] transition-colors">Rotate</button>
+: <div className="flex gap-2"><button onClick={async () => { const r = await fetchWithAuth("/api/generate-key", { method: "POST", body: JSON.stringify({ action: "rotate" }) }).then(r => r.json()); if (r.key) { setKey(r.key); setPreview(r.preview || ""); setShow(true); setMsg("Rotated. Copy the new key now."); setTimeout(() => setMsg(""), 8000); } setConfirmR(false); }} className="text-[10px] text-[#FF5F57]">Confirm</button><button onClick={() => setConfirmR(false)} className="text-[10px] text-[#3D4654]">Cancel</button></div>}
+</div>
+{msg && <p className="text-[#E8B94B] text-[10px] mt-1">{msg}</p>}
+</div>
+);
 }
 
 const PROVIDERS = [
@@ -158,7 +177,7 @@ export default function Dashboard() {
     return () => clearInterval(i);
   }, [router]);
 
-  const fetchStats = async () => { try { const r = await (await fetch("/api/stats")).json(); setStats(r); setLastUpdated(new Date().toLocaleTimeString()); setStatsLoading(false); } catch { setStatsLoading(false); } };
+  const fetchStats = async () => { try { const r = await (await fetchWithAuth("/api/stats")).json(); setStats(r); setLastUpdated(new Date().toLocaleTimeString()); setStatsLoading(false); } catch { setStatsLoading(false); } };
 
   if (loading) return (
     <div className="min-h-screen bg-[#0A0D12] flex flex-col items-center justify-center gap-4">
