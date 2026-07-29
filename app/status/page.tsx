@@ -14,18 +14,18 @@ export default function Status() {
       const start = Date.now();
       const res = await fetch("/api/proxy");
       const data = await res.json();
-      results.push({ name: "API Proxy", status: data.status === "active" ? "operational" : "degraded", latency: Date.now() - start });
+      results.push({ name: "API Proxy", status: data.service ? "operational" : "degraded", latency: Date.now() - start });
     } catch (e) {
       results.push({ name: "API Proxy", status: "down", latency: 0 });
     }
 
     try {
       const start = Date.now();
-      const res = await fetch("/api/stats");
+      const res = await fetch("/api/health");
       const data = await res.json();
-      results.push({ name: "Analytics API", status: data.totals !== undefined ? "operational" : "degraded", latency: Date.now() - start });
+      results.push({ name: "Health Check", status: data.status === "healthy" ? "operational" : "degraded", latency: Date.now() - start });
     } catch (e) {
-      results.push({ name: "Analytics API", status: "down", latency: 0 });
+      results.push({ name: "Health Check", status: "down", latency: 0 });
     }
 
     try {
