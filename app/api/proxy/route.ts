@@ -1,5 +1,6 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { Redis } from "@upstash/redis";
+import { isSafeOutboundUrl } from "@/lib/ssrf-guard";
 
 // Redis connection
 let redis: any = null;
@@ -98,12 +99,13 @@ async function logRequest(data: any): Promise<void> {
     }));
     await redis.ltrim("audit_log", 0, 999);
 
-    // Webhook
-    if (data.webhookUrl) {
+    // Webhook (SSRF-guarded: only dispatch to safe, public URLs)
+    if (data.webhookUrl && isSafeOutboundUrl(data.webhookUrl)) {
       fetch(data.webhookUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ event: "request_completed", data: entry }),
+        redirect: "error",
       }).catch(() => {});
     }
   } catch {}
