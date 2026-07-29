@@ -253,7 +253,7 @@ function buildProviderRequest(provider: string, model: string, apiKey: string, m
   }
   // Google
   return {
-    url: "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + apiKey,
+    url: "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent?key=" + apiKey,
     headers: { "Content-Type": "application/json" },
     body: { contents: messages.map((m: any) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })) },
   };
@@ -347,6 +347,10 @@ export async function POST(req: NextRequest) {
 
     // Detect complexity and pick model
     const complexity = detectComplexity(cleanMessages);
+    // SSRF/allowlist guard: a user-supplied model must be a known model id.
+    if (requestedModel && !(requestedModel in PRICING)) {
+      return NextResponse.json({ error: "Unknown model. See supported_models via GET /api/proxy." }, { status: 400 });
+    }
     const model = requestedModel || (quality === "max_quality" ? pickModel("complex", provider) : pickModel(complexity, provider));
 
     // Compress prompt
