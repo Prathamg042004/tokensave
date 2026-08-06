@@ -1,5 +1,6 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { Redis } from "@upstash/redis";
+import { isSafeOutboundUrl } from "@/lib/ssrf-guard";
 
 // Redis connection
 let redis: any = null;
@@ -98,12 +99,13 @@ async function logRequest(data: any): Promise<void> {
     }));
     await redis.ltrim("audit_log", 0, 999);
 
-    // Webhook
-    if (data.webhookUrl) {
+    // Webhook (SSRF-guarded: only dispatch to safe, public URLs)
+    if (data.webhookUrl && isSafeOutboundUrl(data.webhookUrl)) {
       fetch(data.webhookUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ event: "request_completed", data: entry }),
+        redirect: "error",
       }).catch(() => {});
     }
   } catch {}
@@ -251,7 +253,7 @@ function buildProviderRequest(provider: string, model: string, apiKey: string, m
   }
   // Google
   return {
-    url: "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + apiKey,
+    url: "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent?key=" + apiKey,
     headers: { "Content-Type": "application/json" },
     body: { contents: messages.map((m: any) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })) },
   };
@@ -345,6 +347,10 @@ export async function POST(req: NextRequest) {
 
     // Detect complexity and pick model
     const complexity = detectComplexity(cleanMessages);
+    // SSRF/allowlist guard: a user-supplied model must be a known model id.
+    if (requestedModel && !(requestedModel in PRICING)) {
+      return NextResponse.json({ error: "Unknown model. See supported_models via GET /api/proxy." }, { status: 400 });
+    }
     const model = requestedModel || (quality === "max_quality" ? pickModel("complex", provider) : pickModel(complexity, provider));
 
     // Compress prompt

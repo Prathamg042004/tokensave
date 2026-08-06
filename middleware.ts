@@ -18,8 +18,17 @@ export function middleware(request: NextRequest) {
 
   // CORS for API routes
   if (request.nextUrl.pathname.startsWith("/api/")) {
-    const origin = request.headers.get("origin") || "*";
-    response.headers.set("Access-Control-Allow-Origin", origin);
+    const requestOrigin = request.headers.get("origin") || "";
+    // Allowlist of trusted origins. Requests from other origins get no CORS grant.
+    const allowedOrigins = [
+      "https://tokensave.vercel.app",
+      "http://localhost:3000",
+    ];
+    const origin = allowedOrigins.includes(requestOrigin) ? requestOrigin : "";
+    if (origin) {
+      response.headers.set("Access-Control-Allow-Origin", origin);
+      response.headers.set("Vary", "Origin");
+    }
     response.headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
     response.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key");
     response.headers.set("Access-Control-Max-Age", "86400");
