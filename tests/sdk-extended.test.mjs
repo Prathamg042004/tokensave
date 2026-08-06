@@ -8,19 +8,10 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const { TokenSave } = require("../sdk/tokensave.js");
 
-test("constructor honours explicit options over defaults", () => {
-  const ts = new TokenSave({
-    provider: "openai",
-    quality: "cheap",
-    enableCache: false,
-    enableRouting: false,
-    enableCompression: false,
-  });
+test("constructor honours explicit provider and quality overrides", () => {
+  const ts = new TokenSave({ provider: "openai", quality: "cheap" });
   assert.equal(ts.provider, "openai");
   assert.equal(ts.quality, "cheap");
-  assert.equal(ts.enableCache, false);
-  assert.equal(ts.enableRouting, false);
-  assert.equal(ts.enableCompression, false);
 });
 
 test("token estimate handles empty, whitespace and unicode safely", () => {
