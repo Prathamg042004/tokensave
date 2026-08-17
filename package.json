@@ -20,8 +20,8 @@
     "check": "echo 'Checking all endpoints...' && curl -s -o /dev/null -w '%{http_code}' https://tokensave.vercel.app && echo ' Landing: OK' && curl -s -o /dev/null -w '%{http_code}' https://tokensave.vercel.app/api/proxy && echo ' Proxy: OK' && curl -s -o /dev/null -w '%{http_code}' https://tokensave.vercel.app/api/health && echo ' Health: OK'"
   },
   "dependencies": {
-    "@sentry/nextjs": "^10.69.0",
-    "@supabase/supabase-js": "^2.112.2",
+    "@sentry/nextjs": "^10.70.0",
+    "@supabase/supabase-js": "^2.112.3",
     "@upstash/redis": "^1.38.2",
     "next": "16.3.0",
     "react": "19.2.8",
