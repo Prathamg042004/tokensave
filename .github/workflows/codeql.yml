@@ -32,7 +32,7 @@ jobs:
           persist-credentials: false
 
       - name: Initialise CodeQL
-        uses: github/codeql-action/init@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4
+        uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4
         with:
           languages: javascript-typescript
           # security-extended adds the SSRF, hardcoded-credential and
@@ -40,6 +40,6 @@ jobs:
           queries: security-extended
 
       - name: Analyse
-        uses: github/codeql-action/analyze@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4
+        uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4
         with:
           category: "/language:javascript-typescript"
