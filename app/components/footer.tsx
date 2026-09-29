@@ -31,7 +31,7 @@ export default function Footer({ maxWidth = "1200px", columns = false }: FooterP
               { href: "https://github.com/Prathamg042004/tokensave", label: "GitHub" },
             ]} />
             <FooterColumn title="Connect" links={[
-              { href: "mailto:prathamg200404@gmail.com", label: "Email" },
+              { href: "mailto:support@tokensave.in", label: "Email" },
               { href: "https://linkedin.com", label: "LinkedIn" },
               { href: "https://twitter.com", label: "Twitter" },
             ]} />
