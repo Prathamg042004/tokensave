@@ -464,7 +464,7 @@ export default function Dashboard() {
             <FadeUp delay={0.2}><div className="bg-[#12161E]/60 border border-white/[0.06] rounded-2xl p-6">
               <h2 className="text-[15px] font-semibold font-display mb-2">Support</h2>
               <p className="text-[12px] text-[#5A6577] mb-3">Need help with integration?</p>
-              <a href="mailto:prathamg200404@gmail.com" className="text-[#5B8DEF] text-[13px] hover:underline">prathamg200404@gmail.com</a>
+              <a href="mailto:support@tokensave.in" className="text-[#5B8DEF] text-[13px] hover:underline">support@tokensave.in</a>
             </div></FadeUp>
           </div>
         )}

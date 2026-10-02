@@ -15,7 +15,7 @@ Please **do not open a public issue** for security vulnerabilities.
 
 Report privately through
 [GitHub Security Advisories](https://github.com/Prathamg042004/tokensave/security/advisories/new)
-or by email to **prathamg200404@gmail.com**, including:
+or by email to **support@tokensave.in**, including:
 
 - a description of the issue and its impact
 - steps to reproduce
