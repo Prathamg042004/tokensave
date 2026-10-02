@@ -91,7 +91,7 @@ export default function Status() {
         </div>
 
         <div className="mt-8 text-center">
-          <p className="text-gray-500 text-sm">Questions? Contact <a href="mailto:prathamg200404@gmail.com" className="text-cyan-400 hover:underline">prathamg200404@gmail.com</a></p>
+          <p className="text-gray-500 text-sm">Questions? Contact <a href="mailto:support@tokensave.in" className="text-cyan-400 hover:underline">support@tokensave.in</a></p>
         </div>
       </div>
 
