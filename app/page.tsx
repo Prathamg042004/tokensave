@@ -1,361 +1,154 @@
-﻿"use client";
-import { useRouter } from "next/navigation";
-import { useState, useEffect, useRef, ReactNode, useCallback } from "react";
+"use client";
+
+import Link from "next/link";
+import { useState } from "react";
 import { ProviderLogo } from "./icons";
 
-function useInView(threshold = 0.15) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [v, setV] = useState(false);
-  useEffect(() => { const el = ref.current; if (!el) return; const o = new IntersectionObserver(([e]) => { if (e.isIntersecting) setV(true); }, { threshold }); o.observe(el); return () => o.disconnect(); }, [threshold]);
-  return { ref, v };
+const REPO = "https://github.com/Prathamg042004/tokensave";
+const SUPPORT = "https://mail.google.com/mail/?view=cm&fs=1&to=support%40tokensave.in";
+const example = [
+  '// Run on your server. Keep API keys private.',
+  'const response = await fetch(',
+  '  "https://www.tokensave.in/api/proxy",',
+  '  {',
+  '    method: "POST",',
+  '    headers: { "Content-Type": "application/json" },',
+  '    body: JSON.stringify({',
+  '      provider: "anthropic",',
+  '      apiKey: process.env.ANTHROPIC_API_KEY,',
+  '      tsKey: process.env.TOKENSAVE_KEY,',
+  '      messages: [{',
+  '        role: "user",',
+  '        content: "What is the capital of Japan?"',
+  '      }]',
+  '    })',
+  '  }',
+  ');',
+  'if (!response.ok) throw new Error("Request failed");',
+  'const data = await response.json();',
+  'console.log(data.tokensave_meta);',
+].join("\n");
+
+const features = [
+  { icon: "cache", title: "Reuse an answer", tag: "Response caching", text: "Return a stored response for a matching request instead of making another provider call." },
+  { icon: "route", title: "Match the model to the task", tag: "Cost-aware routing", text: "Use prompt complexity rules to select a cheaper or more capable model. Test the results on your own workload." },
+  { icon: "compress", title: "Send less unnecessary text", tag: "Prompt compression", text: "Trim filler and redundant whitespace before a request. Review output quality for formatting-sensitive tasks." },
+  { icon: "sliders", title: "Choose your tradeoff", tag: "Quality modes", text: "Choose auto, max_savings, or max_quality to adjust how TokenSave prioritizes cost and model capability." },
+  { icon: "route", title: "Plan for rate limits", tag: "Provider fallback", text: "Configure a backup provider and its credentials so eligible rate-limited requests can take another path." },
+  { icon: "context", title: "Keep conversations manageable", tag: "Context tools", text: "Use separate context endpoints to summarize older turns or trim a conversation to a token budget." },
+];
+const questions = [
+  { q: "What does TokenSave actually do?", a: "TokenSave sits between your application and an AI provider. It can reuse cached responses, select models using complexity rules, and reduce prompt text. The response includes metadata so you can inspect the path taken." },
+  { q: "How much will I save?", a: "There is no fixed savings rate. Results depend on repeated requests, your starting model, prompt length, and quality requirements. Current cost figures are estimates; compare your provider bills and representative outputs before deciding whether TokenSave is a fit." },
+  { q: "Can I use my existing provider SDK?", a: "The proxy currently uses its own JSON request format. Changing only the base URL in an OpenAI or Anthropic SDK is not sufficient. Use the API example and reference; compatible endpoints are on the roadmap." },
+  { q: "Does it support streaming and tool calling?", a: "Not yet. The current proxy is intended for non-streaming text requests. Check the public roadmap before choosing TokenSave for an agent or a workflow that depends on tools." },
+  { q: "Do I need my own API key?", a: "Yes. Bring a key for your selected provider. Real requests may incur provider charges, billed separately from TokenSave. Keep integration keys on your server and review the security documentation before connecting an application." },
+  { q: "Is TokenSave open source?", a: "Yes. The source is available on GitHub under the MIT license. You can inspect the implementation, follow the roadmap, and contribute. The hosted product is still in early development." },
+];
+
+function Icon({ name = "arrow" }: { name?: string }) {
+  const paths: Record<string, string> = {
+    arrow: "M4 12h16m-6-6 6 6-6 6",
+    cache: "M20 7v5h-5M4 17v-5h5M6.1 7a7 7 0 0 1 11.8-1L20 9M4 15l2.1 3A7 7 0 0 0 17.9 17",
+    route: "M5 4v11a5 5 0 0 0 5 5h9m-4-4 4 4-4 0M5 12h8a5 5 0 0 0 5-5V4m-3 3 3-3 3 3",
+    compress: "M4 5h16M4 19h16M8 9l4 3 4-3M8 15l4-3 4 3",
+    sliders: "M5 4v7m0 4v5M12 4v2m0 4v10M19 4v10m0 4v2M2 11h6M9 6h6M16 14h6",
+    context: "M5 4h14v16H5zM8 8h8M8 12h8M8 16h4",
+    check: "m5 12 4 4L19 6",
+    code: "m8 7-5 5 5 5m8-10 5 5-5 5m-3-13-2 16",
+    plus: "M12 5v14M5 12h14",
+  };
+  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name] || paths.arrow} /></svg>;
 }
 
-function FadeUp({ children, delay = 0, className = "" }: { children: ReactNode; delay?: number; className?: string }) {
-  const { ref, v } = useInView();
-  return <div ref={ref} className={className} style={{ opacity: v ? 1 : 0, transform: v ? "translateY(0)" : "translateY(40px)", transition: `all 0.8s cubic-bezier(0.16,1,0.3,1) ${delay}s` }}>{children}</div>;
+function Brand() {
+  return <Link href="/" className="ts-brand" aria-label="TokenSave home"><span className="ts-mark" aria-hidden="true">TS</span><span>TokenSave<span className="ts-brand-dot">.</span></span></Link>;
 }
 
-function ParticleField() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    let animId: number;
-    let w = canvas.width = window.innerWidth;
-    let h = canvas.height = 800;
-    const particles: { x: number; y: number; vx: number; vy: number; r: number; o: number }[] = [];
-    for (let i = 0; i < 60; i++) particles.push({ x: Math.random() * w, y: Math.random() * h, vx: (Math.random() - 0.5) * 0.3, vy: (Math.random() - 0.5) * 0.3, r: Math.random() * 1.5 + 0.5, o: Math.random() * 0.4 + 0.1 });
-    function draw() {
-      ctx!.clearRect(0, 0, w, h);
-      particles.forEach(p => { p.x += p.vx; p.y += p.vy; if (p.x < 0 || p.x > w) p.vx *= -1; if (p.y < 0 || p.y > h) p.vy *= -1; ctx!.beginPath(); ctx!.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx!.fillStyle = `rgba(91,141,239,${p.o})`; ctx!.fill(); });
-      for (let i = 0; i < particles.length; i++) for (let j = i + 1; j < particles.length; j++) { const dx = particles[i].x - particles[j].x, dy = particles[i].y - particles[j].y, d = Math.sqrt(dx * dx + dy * dy); if (d < 120) { ctx!.beginPath(); ctx!.moveTo(particles[i].x, particles[i].y); ctx!.lineTo(particles[j].x, particles[j].y); ctx!.strokeStyle = `rgba(91,141,239,${0.06 * (1 - d / 120)})`; ctx!.stroke(); } }
-      animId = requestAnimationFrame(draw);
-    }
-    draw();
-    const resize = () => { w = canvas.width = window.innerWidth; h = canvas.height = 800; };
-    window.addEventListener("resize", resize);
-    return () => { cancelAnimationFrame(animId); window.removeEventListener("resize", resize); };
-  }, []);
-  return <canvas ref={canvasRef} className="absolute top-0 left-0 w-full pointer-events-none" style={{ height: 800 }} />;
-}
-
-function OrbitingLogos() {
-  return (
-    <div className="relative w-[300px] h-[300px] md:w-[400px] md:h-[400px]">
-      <div className="absolute inset-0 rounded-full border border-white/[0.04]" />
-      <div className="absolute inset-[15%] rounded-full border border-white/[0.06]" />
-      <div className="absolute inset-[35%] rounded-full border border-[#5B8DEF]/10" />
-      <div className="absolute inset-[40%] rounded-full bg-gradient-to-br from-[#5B8DEF]/20 to-[#A78BFA]/20 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-12 h-12 bg-gradient-to-br from-[#5B8DEF] to-[#A78BFA] rounded-xl flex items-center justify-center text-white font-bold text-lg mx-auto shadow-xl shadow-[#5B8DEF]/30">TS</div>
-          <p className="text-[10px] text-[#5A6577] mt-2">TokenSave</p>
-        </div>
+function RequestPreview() {
+  const [cached, setCached] = useState(false);
+  return <div className="ts-preview">
+    <div className="ts-preview-top"><span><span className="ts-small-mark">TS</span> Request explorer</span><span className="ts-label">ILLUSTRATIVE DEMO</span></div>
+    <div className="ts-preview-body">
+      <div className="ts-demo-switch" role="group" aria-label="Example request"><button type="button" aria-pressed={!cached} onClick={() => setCached(false)}>First request</button><button type="button" aria-pressed={cached} onClick={() => setCached(true)}>Repeat request</button></div>
+      <div className="ts-prompt"><span className="ts-label">INPUT</span><p>What is the capital of Japan?</p></div>
+      <div className="ts-trace" aria-live="polite" aria-atomic="true">
+        <div><span className="ts-step-icon"><Icon name="check" /></span><span><strong>Check for a saved response</strong><small>{cached ? "Matching request found in cache" : "No matching response in this example"}</small></span><span className={cached ? "ts-badge ts-green" : "ts-badge"}>{cached ? "HIT" : "MISS"}</span></div>
+        <div><span className="ts-step-icon"><Icon name={cached ? "cache" : "route"} /></span><span><strong>{cached ? "Reuse the saved answer" : "Choose a model"}</strong><small>{cached ? "Skip the provider call" : "Simple question → lower-cost model"}</small></span></div>
+        <div><span className="ts-step-icon ts-green"><Icon name="check" /></span><span><strong>Return the response</strong><small>Answer + optimization metadata</small></span></div>
       </div>
-      {[
-        { provider: "anthropic", name: "Claude", angle: 0, speed: 20, radius: "2%", color: "#D4A574" },
-        { provider: "openai", name: "GPT", angle: 90, speed: 25, radius: "2%", color: "#74AA9C" },
-        { provider: "google", name: "Gemini", angle: 180, speed: 30, radius: "2%", color: "#4285F4" },
-        { provider: "groq", name: "Groq", angle: 270, speed: 22, radius: "2%", color: "#F55036" },
-      ].map((p, i) => (
-        <div key={p.provider} className="absolute inset-0" style={{ animation: `spin ${p.speed}s linear infinite`, animationDelay: `${-p.speed * (p.angle / 360)}s` }}>
-          <div className="absolute left-1/2 -translate-x-1/2" style={{ top: p.radius }}>
-            <div className="flex flex-col items-center" style={{ animation: `counter-spin ${p.speed}s linear infinite`, animationDelay: `${-p.speed * (p.angle / 360)}s` }}>
-              <div className="w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center border backdrop-blur-sm hover:scale-110 transition-transform cursor-default" style={{ backgroundColor: p.color + "10", borderColor: p.color + "30", boxShadow: `0 0 20px ${p.color}15` }}>
-                <ProviderLogo provider={p.provider} size={24} />
-              </div>
-              <span className="text-[10px] mt-1 font-medium" style={{ color: p.color }}>{p.name}</span>
-            </div>
-          </div>
-        </div>
-      ))}
+      <div className="ts-answer"><span className="ts-label">OUTPUT</span><p>The capital of Japan is Tokyo.</p><div><span className="ts-dot" />{cached ? "Served from cache · no new provider call" : "Served by the selected AI provider"}</div></div>
+      <p className="ts-demo-note">Interactive illustration. No API request is sent.</p>
     </div>
-  );
-}
-
-function AnimatedTerminal() {
-  const lines = [
-    { t: '$ curl -X POST tokensave.vercel.app/api/proxy \\', c: "#E8ECF4", d: 0 },
-    { t: '  -d \'{"provider":"anthropic","messages":[...]}\'', c: "#5A6577", d: 400 },
-    { t: '', c: "", d: 700 },
-    { t: '⟩ Analyzing complexity... simple (6 words)', c: "#5A6577", d: 1000 },
-    { t: '⟩ Routing → claude-haiku (66% cheaper than sonnet)', c: "#5B8DEF", d: 1500 },
-    { t: '⟩ Compressed: removed 3 filler tokens', c: "#E8B94B", d: 2000 },
-    { t: '⟩ Cache: MISS — forwarding to Anthropic...', c: "#F472B6", d: 2500 },
-    { t: '', c: "", d: 3000 },
-    { t: '✓ "The capital of Japan is Tokyo."', c: "#4ADE80", d: 3500 },
-    { t: '  model: claude-haiku | cost: $0.0004 | saved: 66%', c: "#4ADE80", d: 3800 },
-    { t: '', c: "", d: 4300 },
-    { t: '$ # Sending exact same request again...', c: "#5A6577", d: 4800 },
-    { t: '', c: "", d: 5100 },
-    { t: '⚡ CACHE HIT — instant response', c: "#4ADE80", d: 5500 },
-    { t: '  cost: $0.0000 | latency: 12ms | saved: 100%', c: "#E8B94B", d: 5800 },
-  ];
-  const [shown, setShown] = useState<typeof lines>([]);
-  const { ref, v } = useInView(0.3);
-  useEffect(() => { if (!v) return; const ts = lines.map((l, i) => setTimeout(() => setShown(p => [...p, l]), l.d)); return () => ts.forEach(clearTimeout); }, [v]);
-
-  return (
-    <div ref={ref} className="relative group">
-      <div className="absolute -inset-1 bg-gradient-to-r from-[#5B8DEF] via-[#A78BFA] to-[#E8B94B] rounded-2xl opacity-0 group-hover:opacity-20 blur-md transition-opacity duration-500" />
-      <div className="absolute -inset-0.5 bg-gradient-to-r from-[#5B8DEF] via-[#A78BFA] to-[#4ADE80] rounded-2xl opacity-15 animate-gradient-rotate" />
-      <div className="relative bg-[#0D1117] border border-white/10 rounded-2xl overflow-hidden">
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-white/5 bg-white/[0.02]">
-          <div className="w-3 h-3 rounded-full bg-[#FF5F57] hover:brightness-125 transition-all cursor-default" /><div className="w-3 h-3 rounded-full bg-[#FEBC2E] hover:brightness-125 transition-all cursor-default" /><div className="w-3 h-3 rounded-full bg-[#28C840] hover:brightness-125 transition-all cursor-default" />
-          <span className="ml-3 text-[11px] text-[#3D4654] font-mono">terminal — tokensave live demo</span>
-          <div className="ml-auto flex items-center gap-1.5"><div className="w-1.5 h-1.5 bg-[#4ADE80] rounded-full animate-pulse" /><span className="text-[9px] text-[#4ADE80]">LIVE</span></div>
-        </div>
-        <div className="p-5 font-mono text-[11px] md:text-[12px] leading-[1.9] min-h-[320px] overflow-hidden">
-          {shown.map((l, i) => <div key={i} className="animate-line" style={{ color: l.c, animationDelay: `${i * 0.05}s` }}>{l.t || "\u00A0"}</div>)}
-          {v && shown.length < lines.length && <span className="inline-block w-2 h-[18px] bg-[#5B8DEF] animate-blink ml-0.5" />}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function TiltCard({ children, className = "" }: { children: ReactNode; className?: string }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const handleMouse = useCallback((e: React.MouseEvent) => {
-    const el = ref.current; if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width - 0.5;
-    const y = (e.clientY - rect.top) / rect.height - 0.5;
-    el.style.transform = `perspective(800px) rotateY(${x * 6}deg) rotateX(${-y * 6}deg) scale(1.02)`;
-  }, []);
-  const handleLeave = useCallback(() => { if (ref.current) ref.current.style.transform = "perspective(800px) rotateY(0) rotateX(0) scale(1)"; }, []);
-  return <div ref={ref} onMouseMove={handleMouse} onMouseLeave={handleLeave} className={`transition-transform duration-200 ${className}`}>{children}</div>;
-}
-
-function Counter({ end, suffix, label, color }: { end: number; suffix: string; label: string; color: string }) {
-  const [val, setVal] = useState(0);
-  const { ref, v } = useInView(0.5);
-  useEffect(() => { if (!v) return; let t = 0; const dur = 1500; const start = performance.now(); const anim = (now: number) => { t = Math.min((now - start) / dur, 1); const ease = 1 - Math.pow(1 - t, 4); setVal(Math.floor(ease * end)); if (t < 1) requestAnimationFrame(anim); }; requestAnimationFrame(anim); }, [v, end]);
-  return <div ref={ref} className="text-center"><p className="text-[44px] md:text-[56px] font-bold tracking-tight" style={{ color }}>{val}{suffix}</p><p className="text-[13px] text-[#5A6577] mt-1">{label}</p></div>;
-}
-
-function FlowLine() {
-  const { ref, v } = useInView();
-  return (
-    <svg ref={ref as any} viewBox="0 0 800 200" className="w-full h-auto" style={{ opacity: v ? 1 : 0, transition: "opacity 0.8s" }}>
-      <defs>
-        <linearGradient id="flow" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#5B8DEF" /><stop offset="50%" stopColor="#A78BFA" /><stop offset="100%" stopColor="#4ADE80" /></linearGradient>
-        <filter id="glow2"><feGaussianBlur stdDeviation="4" /><feMerge><feMergeNode /><feMergeNode in="SourceGraphic" /></feMerge></filter>
-      </defs>
-      <rect x="20" y="70" width="140" height="60" rx="12" fill="#12161E" stroke="#5B8DEF33" />
-      <text x="90" y="98" textAnchor="middle" fill="#E8ECF4" fontSize="14" fontWeight="600" fontFamily="system-ui">Your App</text>
-      <text x="90" y="118" textAnchor="middle" fill="#5A6577" fontSize="10" fontFamily="system-ui">sends request</text>
-      <rect x="280" y="40" width="200" height="120" rx="14" fill="#12161E" stroke="url(#flow)" strokeWidth="1.5" />
-      <text x="380" y="68" textAnchor="middle" fill="#5B8DEF" fontSize="13" fontWeight="700" fontFamily="system-ui">TokenSave</text>
-      <text x="380" y="90" textAnchor="middle" fill="#4ADE80" fontSize="11" fontFamily="system-ui">Cache · Route · Compress</text>
-      <text x="380" y="110" textAnchor="middle" fill="#E8B94B" fontSize="11" fontFamily="system-ui">Fallback · Quality modes</text>
-      <text x="380" y="135" textAnchor="middle" fill="#A78BFA" fontSize="9" fontFamily="system-ui">avg 40% savings</text>
-      {[{ name: "Claude", y: 35, color: "#D4A574" }, { name: "GPT", y: 75, color: "#74AA9C" }, { name: "Gemini", y: 115, color: "#4285F4" }, { name: "Groq", y: 155, color: "#F55036" }].map(p => (
-        <g key={p.name}><rect x="600" y={p.y} width="120" height="30" rx="8" fill="#12161E" stroke={p.color + "44"} /><circle cx="618" cy={p.y + 15} r="5" fill={p.color} /><text x="670" y={p.y + 19} textAnchor="middle" fill={p.color} fontSize="12" fontWeight="500" fontFamily="system-ui">{p.name}</text></g>
-      ))}
-      <path d="M160 100 L280 100" stroke="url(#flow)" strokeWidth="2" strokeDasharray="6,4" filter="url(#glow2)">{v && <animate attributeName="stroke-dashoffset" from="100" to="0" dur="2s" fill="freeze" />}</path>
-      {[35, 75, 115, 155].map((y, i) => <path key={i} d={`M480 100 L600 ${y + 15}`} stroke={["#D4A574", "#74AA9C", "#4285F4", "#F55036"][i] + "44"} strokeWidth="1.5" strokeDasharray="4,4">{v && <animate attributeName="stroke-dashoffset" from="60" to="0" dur="1.5s" begin={`${0.3 + i * 0.15}s`} fill="freeze" />}</path>)}
-      {v && <circle r="4" fill="#5B8DEF" filter="url(#glow2)"><animateMotion dur="2s" repeatCount="indefinite" path="M160 100 L280 100" /><animate attributeName="opacity" values="1;0.3;1" dur="2s" repeatCount="indefinite" /></circle>}
-    </svg>
-  );
+    <div className="ts-preview-bottom"><span>Explore with your own prompt</span><Link href="/playground" aria-label="Open playground to test your prompt"><Icon /></Link></div>
+  </div>;
 }
 
 export default function Home() {
-  const router = useRouter();
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
-
-  useEffect(() => {
-    const handleMouse = (e: MouseEvent) => setMousePos({ x: e.clientX, y: e.clientY });
-    window.addEventListener("mousemove", handleMouse);
-    return () => window.removeEventListener("mousemove", handleMouse);
-  }, []);
-
-  return (
-    <div className="min-h-screen bg-[#0A0D12] text-[#E8ECF4] overflow-hidden">
-      <style jsx global>{`
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        @keyframes counter-spin { from { transform: rotate(0deg); } to { transform: rotate(-360deg); } }
-        @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
-        @keyframes gradient-rotate { 0% { filter: hue-rotate(0deg); } 100% { filter: hue-rotate(360deg); } }
-        .animate-blink { animation: blink 0.8s step-end infinite; }
-        .animate-gradient-rotate { animation: gradient-rotate 8s linear infinite; }
-        .animate-line { animation: slideIn 0.3s ease forwards; opacity: 0; }
-        @keyframes slideIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
-        .cursor-glow { position: fixed; width: 300px; height: 300px; border-radius: 50%; pointer-events: none; z-index: 0; background: radial-gradient(circle, rgba(91,141,239,0.06) 0%, transparent 70%); transition: left 0.3s ease, top 0.3s ease; }
-      `}</style>
-
-      <div className="cursor-glow" style={{ left: mousePos.x - 150, top: mousePos.y - 150 }} />
-      <ParticleField />
-
-      <nav className="sticky top-0 z-50 bg-[#0A0D12]/60 backdrop-blur-2xl border-b border-white/[0.04]">
-        <div className="flex justify-between items-center px-6 lg:px-12 py-3.5 max-w-[1200px] mx-auto">
-          <a href="/" className="flex items-center gap-2.5 group">
-            <div className="w-8 h-8 bg-gradient-to-br from-[#5B8DEF] to-[#A78BFA] rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-[#5B8DEF]/20 group-hover:shadow-[#5B8DEF]/40 transition-shadow">TS</div>
-            <span className="text-[17px] font-semibold tracking-tight">TokenSave</span>
-          </a>
-          <div className="hidden md:flex items-center gap-7">
-            {["Playground", "Docs", "Security", "Changelog", "GitHub"].map(n => (
-              <a key={n} href={n === "GitHub" ? "https://github.com/Prathamg042004/tokensave" : `/${n.toLowerCase()}`} className="text-[13px] text-[#5A6577] hover:text-white transition-colors relative group">
-                {n}
-                <span className="absolute -bottom-1 left-0 w-0 h-[2px] bg-[#5B8DEF] group-hover:w-full transition-all duration-300" />
-              </a>
-            ))}
-          </div>
-          <div className="flex gap-3 items-center">
-            <button onClick={() => router.push("/login")} className="text-[13px] text-[#5A6577] hover:text-white transition-colors">Sign in</button>
-            <button onClick={() => router.push("/login")} className="relative px-5 py-2 bg-gradient-to-r from-[#5B8DEF] to-[#A78BFA] text-white rounded-lg text-[13px] font-medium overflow-hidden group shadow-lg shadow-[#5B8DEF]/20 hover:shadow-[#5B8DEF]/40 transition-shadow">
-              <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/25 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
-              <span className="relative">Start free</span>
-            </button>
-          </div>
-        </div>
-      </nav>
-
-      <div className="relative z-10 max-w-[1200px] mx-auto px-6 lg:px-12">
-
-        <section className="pt-16 md:pt-24 pb-20">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-            <FadeUp>
-              <div className="inline-flex items-center gap-2 bg-[#5B8DEF]/5 border border-[#5B8DEF]/15 rounded-full px-4 py-1.5 mb-6">
-                <div className="w-2 h-2 bg-[#4ADE80] rounded-full animate-pulse" /><span className="text-[12px] text-[#7A8599]">Open source · v3.1 · 4 providers</span>
-              </div>
-              <h1 className="text-[40px] md:text-[56px] font-bold leading-[1.05] tracking-tight">
-                Stop overpaying<br />for <span className="bg-gradient-to-r from-[#5B8DEF] via-[#A78BFA] to-[#4ADE80] bg-clip-text text-transparent">AI API calls</span>
-              </h1>
-              <p className="text-[#7A8599] text-[17px] leading-[1.7] mt-6 max-w-[440px]">Middleware that automatically caches, routes, and compresses every request between your app and AI providers.</p>
-              <div className="flex flex-wrap gap-3 mt-8">
-                <button onClick={() => router.push("/playground")} className="relative px-7 py-3.5 bg-gradient-to-r from-[#5B8DEF] to-[#A78BFA] text-white rounded-xl text-[15px] font-semibold overflow-hidden group shadow-xl shadow-[#5B8DEF]/25 hover:shadow-[#5B8DEF]/40 transition-shadow">
-                  <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
-                  <span className="relative">Open playground</span>
-                </button>
-                <button onClick={() => router.push("/docs")} className="px-7 py-3.5 text-[#7A8599] rounded-xl text-[15px] border border-white/[0.08] hover:bg-white/[0.04] hover:border-white/[0.15] transition-all">Read docs</button>
-              </div>
-            </FadeUp>
-            <FadeUp delay={0.3} className="flex justify-center">
-              <OrbitingLogos />
-            </FadeUp>
-          </div>
-        </section>
-
-        <section className="py-16 border-t border-white/[0.04]">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-            <Counter end={13} suffix="+" label="AI models supported" color="#5B8DEF" />
-            <Counter end={40} suffix="%" label="Average savings" color="#4ADE80" />
-            <Counter end={100} suffix="%" label="Cache hit savings" color="#E8B94B" />
-            <Counter end={12} suffix="ms" label="Cache response time" color="#A78BFA" />
-          </div>
-        </section>
-
-        <section className="py-20 border-t border-white/[0.04]">
-          <FadeUp><h2 className="text-[30px] md:text-[38px] font-bold tracking-tight text-center">Watch a request get optimized</h2><p className="text-[#5A6577] text-[15px] text-center mt-3 mb-12">Real-time view of what happens inside the TokenSave pipeline.</p></FadeUp>
-          <FadeUp delay={0.2}><div className="max-w-[700px] mx-auto"><AnimatedTerminal /></div></FadeUp>
-        </section>
-
-        <section className="py-20 border-t border-white/[0.04]">
-          <FadeUp><h2 className="text-[30px] md:text-[38px] font-bold tracking-tight text-center mb-12">The optimization pipeline</h2></FadeUp>
-          <FadeUp delay={0.2}><div className="max-w-[850px] mx-auto bg-[#12161E]/50 backdrop-blur border border-white/[0.06] rounded-2xl p-6"><FlowLine /></div></FadeUp>
-        </section>
-
-        <section className="py-20 border-t border-white/[0.04]">
-          <FadeUp><h2 className="text-[30px] md:text-[38px] font-bold tracking-tight mb-10">Six layers of optimization</h2></FadeUp>
-          <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
-            {[
-              { t: "Semantic cache", d: "Identical queries return cached responses. Zero API cost, 12ms latency.", m: "100% savings", c: "#4ADE80", s: "md:col-span-4" },
-              { t: "Smart routing", d: "Simple → cheap model. Complex → smart model. When unsure → always smart.", m: "Up to 66% cheaper", c: "#5B8DEF", s: "md:col-span-2" },
-              { t: "Compression", d: "Strips filler phrases while preserving meaning and intent.", m: "5-15% fewer tokens", c: "#E8B94B", s: "md:col-span-2" },
-              { t: "Auto-fallback", d: "Rate limited? Automatically switches to your backup provider.", m: "Zero downtime", c: "#F472B6", s: "md:col-span-2" },
-              { t: "Quality modes", d: "auto · max_savings · max_quality — you choose the tradeoff.", m: "Full control", c: "#A78BFA", s: "md:col-span-2" },
-              { t: "Context summary", d: "Compresses long conversations by 88%. Built for heavy users.", m: "50→6 messages", c: "#FB923C", s: "md:col-span-3" },
-            ].map((f, i) => (
-              <FadeUp key={i} delay={i * 0.08} className={f.s}>
-                <TiltCard className="h-full">
-                  <div className="h-full bg-[#12161E]/60 backdrop-blur border border-white/[0.06] rounded-2xl p-5 hover:border-white/[0.15] transition-all group">
-                    <div className="flex items-center gap-2.5 mb-3"><div className="w-3 h-3 rounded-full group-hover:scale-150 transition-transform duration-300" style={{ backgroundColor: f.c, boxShadow: `0 0 15px ${f.c}40` }} /><h3 className="text-[15px] font-semibold">{f.t}</h3></div>
-                    <p className="text-[12px] text-[#5A6577] leading-relaxed">{f.d}</p>
-                    <p className="text-[12px] font-semibold mt-3" style={{ color: f.c }}>{f.m}</p>
-                  </div>
-                </TiltCard>
-              </FadeUp>
-            ))}
-          </div>
-        </section>
-
-        <section className="py-20 border-t border-white/[0.04]">
-          <FadeUp>
-            <h2 className="text-[30px] md:text-[38px] font-bold tracking-tight text-center mb-8">One line change</h2>
-            <div className="max-w-[650px] mx-auto relative group">
-              <div className="absolute -inset-2 bg-gradient-to-r from-[#5B8DEF]/15 via-[#A78BFA]/15 to-[#4ADE80]/15 rounded-2xl blur-xl group-hover:blur-2xl transition-all" />
-              <div className="relative bg-[#0D1117] border border-white/10 rounded-2xl overflow-hidden">
-                <div className="flex items-center gap-2 px-4 py-3 border-b border-white/5"><div className="w-3 h-3 rounded-full bg-[#FF5F57]" /><div className="w-3 h-3 rounded-full bg-[#FEBC2E]" /><div className="w-3 h-3 rounded-full bg-[#28C840]" /><span className="ml-3 text-[10px] text-[#3D4654] font-mono">your-app.js</span></div>
-                <div className="p-6 font-mono text-[14px] leading-[2.2]">
-                  <span className="text-[#3D4654]">// Before</span><br />
-                  <span className="text-[#5A6577]">fetch(</span><span className="text-[#FF6B6B]/50 line-through">&quot;https://api.anthropic.com/v1/messages&quot;</span><span className="text-[#5A6577]">)</span><br /><br />
-                  <span className="text-[#3D4654]">// After</span><br />
-                  <span className="text-[#5A6577]">fetch(</span><span className="text-[#4ADE80]">&quot;https://tokensave.vercel.app/api/proxy&quot;</span><span className="text-[#5A6577]">)</span>
-                </div>
-              </div>
-            </div>
-          </FadeUp>
-        </section>
-
-        <section className="py-20 border-t border-white/[0.04]">
-          <FadeUp><h2 className="text-[30px] md:text-[38px] font-bold tracking-tight text-center mb-10">Pricing</h2></FadeUp>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 max-w-[900px] mx-auto">
-            {[
-              { n: "Starter", p: "$99", r: "50K requests", f: ["Cache + routing + compression", "4 providers, 13 models", "Dashboard analytics", "Email support"], primary: false },
-              { n: "Growth", p: "$499", r: "500K requests", f: ["Everything in Starter", "Quality modes", "Team management", "Auto-fallback chains", "Priority support"], primary: true },
-              { n: "Enterprise", p: "Custom", r: "Unlimited", f: ["Everything in Growth", "Custom routing rules", "Dedicated manager", "SLA guarantee", "Invoice billing"], primary: false },
-            ].map((p, i) => (
-              <FadeUp key={i} delay={i * 0.1}>
-                <TiltCard className="h-full">
-                  <div className={`relative h-full bg-[#12161E]/60 backdrop-blur border rounded-2xl p-6 ${p.primary ? "border-[#5B8DEF]/30 shadow-xl shadow-[#5B8DEF]/10" : "border-white/[0.06]"}`}>
-                    {p.primary && <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-[#5B8DEF] to-[#A78BFA] text-white text-[10px] font-semibold px-3 py-1 rounded-full shadow-lg">Recommended</div>}
-                    <p className="text-[13px] text-[#5A6577]">{p.n}</p>
-                    <p className="text-[36px] font-bold mt-1">{p.p}<span className="text-[14px] text-[#3D4654] font-normal">{p.p !== "Custom" ? "/mo" : ""}</span></p>
-                    <p className="text-[11px] text-[#3D4654]">{p.r}</p>
-                    <div className="mt-5 space-y-2.5">{p.f.map(f => <p key={f} className="text-[12px] text-[#5A6577]">— {f}</p>)}</div>
-                    <button onClick={() => p.n === "Enterprise" ? window.location.href = "https://mail.google.com/mail/?view=cm&fs=1&to=support%40tokensave.in" : router.push("/login")} className={`mt-6 w-full py-3 rounded-xl text-[13px] font-medium transition-all ${p.primary ? "bg-gradient-to-r from-[#5B8DEF] to-[#A78BFA] text-white hover:opacity-90 shadow-lg shadow-[#5B8DEF]/20" : "border border-white/[0.08] text-[#7A8599] hover:bg-white/[0.04]"}`}>{p.n === "Enterprise" ? "Contact sales" : "Start free"}</button>
-                  </div>
-                </TiltCard>
-              </FadeUp>
-            ))}
-          </div>
-        </section>
-
-        <section className="py-20">
-          <FadeUp>
-            <div className="relative">
-              <div className="absolute -inset-4 bg-gradient-to-r from-[#5B8DEF]/10 via-[#A78BFA]/10 to-[#4ADE80]/10 rounded-[2rem] blur-2xl animate-pulse" />
-              <div className="relative bg-[#12161E]/80 backdrop-blur-xl border border-white/[0.08] rounded-3xl p-10 md:p-16 text-center max-w-[700px] mx-auto">
-                <h2 className="text-[28px] md:text-[34px] font-bold bg-gradient-to-r from-[#5B8DEF] via-[#A78BFA] to-[#4ADE80] bg-clip-text text-transparent">See it work on your queries</h2>
-                <p className="text-[#5A6577] text-[15px] mt-4">Send a prompt, see the optimization, send again for cache hit.</p>
-                <div className="flex gap-3 justify-center mt-8">
-                  <button onClick={() => router.push("/playground")} className="relative px-8 py-3.5 bg-gradient-to-r from-[#5B8DEF] to-[#A78BFA] text-white rounded-xl text-[15px] font-semibold overflow-hidden group shadow-xl shadow-[#5B8DEF]/25">
-                    <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
-                    <span className="relative">Open playground</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </FadeUp>
-        </section>
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [copyStatus, setCopyStatus] = useState("Copy code");
+  async function copyExample() {
+    try { await navigator.clipboard.writeText(example); setCopyStatus("Copied"); }
+    catch { setCopyStatus("Select code to copy"); }
+  }
+  return <div className="ts-site">
+    <style jsx global>{homeStyles}</style>
+    <a className="ts-skip" href="#main">Skip to content</a>
+    <header className="ts-header">
+      <div className="ts-container ts-nav">
+        <Brand />
+        <nav aria-label="Main navigation" className="ts-desktop-nav"><a href="#how-it-works">How it works</a><a href="#pricing">Pricing</a><Link href="/docs">Docs</Link><a href={REPO}>GitHub <span aria-hidden="true">↗</span></a></nav>
+        <div className="ts-nav-actions"><Link className="ts-signin" href="/login">Sign in</Link><Link href="/playground" className="ts-button ts-primary ts-nav-cta">Open playground <Icon /></Link><button type="button" className="ts-menu-button" aria-expanded={menuOpen} aria-controls="mobile-navigation" onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? "Close" : "Menu"}</button></div>
       </div>
-
-      <footer className="relative z-10 border-t border-white/[0.04]">
-        <div className="max-w-[1200px] mx-auto px-6 lg:px-12 py-10">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-8">
-            <div><div className="flex items-center gap-2 mb-4"><div className="w-7 h-7 bg-gradient-to-br from-[#5B8DEF] to-[#A78BFA] rounded-lg flex items-center justify-center text-white font-bold text-[10px]">TS</div><span className="text-[14px] font-semibold">TokenSave</span></div><p className="text-[12px] text-[#3D4654]">AI API cost optimization. Open source.</p></div>
-            <div><p className="text-[11px] text-[#5A6577] uppercase tracking-wider font-medium mb-3">Product</p>{["Playground", "Dashboard", "Status", "Changelog"].map(l => <a key={l} href={`/${l.toLowerCase()}`} className="block text-[12px] text-[#3D4654] hover:text-[#7A8599] transition-colors py-1">{l}</a>)}</div>
-            <div><p className="text-[11px] text-[#5A6577] uppercase tracking-wider font-medium mb-3">Developers</p>{[{ l: "Docs", h: "/docs" }, { l: "API Reference", h: "/docs/api-reference" }, { l: "Security", h: "/security" }, { l: "GitHub", h: "https://github.com/Prathamg042004/tokensave" }].map(a => <a key={a.l} href={a.h} className="block text-[12px] text-[#3D4654] hover:text-[#7A8599] transition-colors py-1">{a.l}</a>)}</div>
-            <div><p className="text-[11px] text-[#5A6577] uppercase tracking-wider font-medium mb-3">Connect</p>{[{ l: "support@tokensave.in", h: "https://mail.google.com/mail/?view=cm&fs=1&to=support%40tokensave.in" }, { l: "LinkedIn", h: "https://linkedin.com" }, { l: "Twitter", h: "https://twitter.com" }].map(a => <a key={a.l} href={a.h} className="block text-[12px] text-[#3D4654] hover:text-[#7A8599] transition-colors py-1">{a.l}</a>)}</div>
-          </div>
-          <div className="border-t border-white/[0.04] pt-6 flex flex-col md:flex-row justify-between items-center gap-4">
-            <p className="text-[11px] text-[#3D4654]">© 2026 TokenSave. All rights reserved.</p>
-            <div className="flex gap-4">{["anthropic", "openai", "google", "groq"].map(p => <div key={p} className="opacity-30 hover:opacity-80 transition-opacity"><ProviderLogo provider={p} size={20} /></div>)}</div>
-          </div>
+      {menuOpen && <nav id="mobile-navigation" className="ts-mobile-nav ts-container" aria-label="Mobile navigation" onClick={() => setMenuOpen(false)}><a href="#how-it-works">How it works</a><a href="#pricing">Pricing</a><Link href="/docs">Documentation</Link><a href={REPO}>GitHub</a><Link href="/login">Sign in</Link></nav>}
+    </header>
+    <main id="main">
+      <section className="ts-hero ts-container" aria-labelledby="hero-title">
+        <div className="ts-hero-copy"><a href={REPO} className="ts-eyebrow-pill"><span className="ts-dot" /> Open source. Built for developers. <span aria-hidden="true">↗</span></a>
+          <h1 id="hero-title">Make every<br />AI call <span>count.</span></h1>
+          <p className="ts-hero-lead">Reduce wasted AI spend.<br />See what happens to every request.</p>
+          <p className="ts-hero-description">TokenSave helps teams building AI apps reuse responses, route simpler prompts to lower-cost models, and reduce unnecessary prompt text.</p>
+          <div className="ts-actions"><Link href="/playground" className="ts-button ts-primary">Open playground <Icon /></Link><a href="#integration" className="ts-button ts-secondary">View integration <Icon name="code" /></a></div>
+          <p className="ts-helper">Bring your own provider key. Provider usage charges apply.</p>
+          <div className="ts-hero-details"><span><Icon name="check" /> 4 providers</span><span><Icon name="check" /> Inspectable source</span><span><Icon name="check" /> JSON API</span></div>
         </div>
-      </footer>
-    </div>
-  );
+        <RequestPreview />
+      </section>
+      <div className="ts-container"><div className="ts-providers"><p>WORKS WITH YOUR AI PROVIDERS</p><div>{[{id:"anthropic",name:"Anthropic"},{id:"openai",name:"OpenAI"},{id:"google",name:"Google Gemini"},{id:"groq",name:"Groq"}].map(p => <span key={p.id}><ProviderLogo provider={p.id} size={25} />{p.name}</span>)}</div></div></div>
+      <section id="how-it-works" className="ts-section ts-container" aria-labelledby="how-title">
+        <div className="ts-section-heading"><div><p className="ts-kicker">LESS WASTE. MORE VISIBILITY.</p><h2 id="how-title">A smarter path from<br />prompt to response.</h2></div><p>Put an optimization layer between your app and your provider. Start with a test workload and inspect the results.</p></div>
+        <div className="ts-flow" aria-label="Your application sends a request through TokenSave to your AI provider"><div><span className="ts-flow-symbol"><Icon name="code" /></span><strong>Your application</strong><small>Send a JSON request</small></div><span className="ts-flow-arrow" aria-hidden="true">→</span><div className="ts-flow-center"><span className="ts-small-mark">TS</span><strong>TokenSave</strong><small>Cache · Route · Compress</small></div><span className="ts-flow-arrow" aria-hidden="true">→</span><div><span className="ts-flow-symbol"><Icon name="context" /></span><strong>Your AI provider</strong><small>Generate when needed</small></div></div>
+        <div className="ts-feature-grid">{features.map((f,i) => <article className="ts-feature" key={f.title}><div className="ts-feature-top"><span className="ts-feature-icon"><Icon name={f.icon} /></span><span className="ts-feature-number">0{i+1}</span></div><p className="ts-feature-tag">{f.tag}</p><h3>{f.title}</h3><p>{f.text}</p></article>)}</div>
+      </section>
+      <section className="ts-measure-band"><div className="ts-container ts-measure"><div><p className="ts-kicker">YOUR WORKLOAD IS THE BENCHMARK</p><h2>Find the savings.<br />Check the answers.</h2><p>Lower cost only matters when the output still works for your application. Compare representative prompts before expanding your usage.</p><Link href="/playground" className="ts-text-link">Try your own prompts <Icon /></Link></div><ol>{[{n:"01",t:"Start with your baseline",d:"Use the provider and model you actually run today."},{n:"02",t:"Compare cost and output",d:"Review responses, selected models, cache behavior, and latency."},{n:"03",t:"Validate the benefit",d:"Check real provider bills against estimates and include your subscription cost."}].map(s => <li key={s.n}><span>{s.n}</span><div><h3>{s.t}</h3><p>{s.d}</p></div></li>)}</ol></div></section>
+      <section id="integration" className="ts-section ts-container ts-integration" aria-labelledby="integration-title"><div><p className="ts-kicker">BUILT FOR YOUR WORKFLOW</p><h2 id="integration-title">Your provider.<br />Your key.<br /><span className="ts-muted-heading">One place to optimize.</span></h2><p className="ts-section-copy">Send a request from your server using TokenSave&apos;s JSON API. Inspect the response metadata to understand how it was handled.</p><div className="ts-integration-note"><Icon name="code" /><p>This is a custom API, not a drop-in SDK replacement. Streaming and tool calling are not supported yet.</p></div><Link href="/docs" className="ts-text-link">Read the integration guide <Icon /></Link></div><div className="ts-code-window"><div className="ts-code-header"><span>server.ts <span> / JavaScript</span></span><button type="button" onClick={copyExample} aria-live="polite">{copyStatus}</button></div><pre tabIndex={0} aria-label="Server-side JavaScript integration example"><code>{example}</code></pre><div className="ts-code-footer"><span className="ts-dot" /> Provider response + TokenSave metadata</div></div></section>
+      <section className="ts-container ts-open-source"><div className="ts-open-icon"><Icon name="code" /></div><div><p className="ts-kicker">OPEN BY DESIGN</p><h2>Read the code behind the promise.</h2><p>Explore the implementation, current limitations, and public roadmap before you connect your app.</p></div><div className="ts-open-links"><a href={REPO} className="ts-button ts-secondary">Explore GitHub <span aria-hidden="true">↗</span></a><Link href="/security">Read security information →</Link></div></section>
+      <section id="pricing" className="ts-section ts-container" aria-labelledby="pricing-title"><div className="ts-centered-heading"><p className="ts-kicker">PRICING</p><h2 id="pricing-title">Choose a plan for your workload.</h2><p>TokenSave subscription pricing. Your AI provider bills usage separately.</p></div><div className="ts-pricing-grid">{[
+        {name:"Starter",description:"For a focused application.",price:"$99",volume:"50,000 requests / month",features:["Response caching and model routing","Prompt compression","Dashboard analytics","Email support"],cta:"Get started",href:"/login"},
+        {name:"Growth",description:"For teams with higher request volume.",price:"$499",volume:"500,000 requests / month",features:["Everything in Starter","Quality modes","Team management","Provider fallback and priority support"],cta:"Get started",href:"/login"},
+        {name:"Enterprise",description:"For requirements that need a conversation.",price:"Custom",volume:"Discuss your volume and requirements",features:["Custom routing requirements","Support and onboarding needs","Billing arrangements","Service terms agreed with your team"],cta:"Contact sales",href:SUPPORT}
+      ].map(p => <article key={p.name} className={p.name === "Growth" ? "ts-plan ts-plan-featured" : "ts-plan"}><div className="ts-plan-title"><h3>{p.name}</h3>{p.name === "Growth" && <span>FOR TEAMS</span>}</div><p className="ts-plan-description">{p.description}</p><p className="ts-price">{p.price}{p.price !== "Custom" && <span> / month</span>}</p><p className="ts-plan-volume">{p.volume}</p><a href={p.href} className={p.name === "Growth" ? "ts-button ts-primary" : "ts-button ts-secondary"}>{p.cta}<Icon /></a><ul>{p.features.map(f => <li key={f}><Icon name="check" />{f}</li>)}</ul></article>)}</div><p className="ts-pricing-note">Evaluating first? <Link href="/playground">Open the playground</Link> with your provider key. For trial terms, overages, or billing questions, <a href={SUPPORT}>contact us</a>.</p></section>
+      <section className="ts-section ts-container ts-faq" aria-labelledby="faq-title"><div><p className="ts-kicker">A FEW THINGS TO KNOW</p><h2 id="faq-title">Clear answers.<br />Before you start.</h2><p>Have a question about your setup?</p><a className="ts-text-link" href={SUPPORT}>Talk to us <Icon /></a></div><div>{questions.map(f => <details key={f.q}><summary>{f.q}<Icon name="plus" /></summary><p>{f.a}</p></details>)}</div></section>
+      <section className="ts-container ts-final"><div><p className="ts-kicker">START WITH ONE REQUEST</p><h2>See what your AI calls<br />could do differently.</h2><p>Bring a prompt. Explore the response. Decide what works for your app.</p></div><div><Link href="/playground" className="ts-button ts-primary">Open playground <Icon /></Link><p className="ts-helper">Your provider key is required.</p></div></section>
+    </main>
+    <footer className="ts-footer"><div className="ts-container"><div className="ts-footer-grid"><div><Brand /><p>Less wasted AI spend.<br />More room to build.</p><span className="ts-footer-note">Open source · Early-stage product</span></div><nav aria-label="Product links"><h3>Product</h3><Link href="/playground">Playground</Link><Link href="/dashboard">Dashboard</Link><a href="#pricing">Pricing</a><Link href="/changelog">Changelog</Link></nav><nav aria-label="Developer links"><h3>Resources</h3><Link href="/docs">Documentation</Link><Link href="/docs/api-reference">API reference</Link><Link href="/security">Security</Link><Link href="/status">Status</Link></nav><nav aria-label="Contact links"><h3>Get in touch</h3><a href={SUPPORT}>support@tokensave.in <span aria-hidden="true">↗</span></a><a href={REPO}>GitHub <span aria-hidden="true">↗</span></a><a href={REPO + "#roadmap"}>Public roadmap <span aria-hidden="true">↗</span></a></nav></div><div className="ts-footer-bottom"><span>© 2026 TokenSave.</span><span>Built for developers who care where every token goes.</span></div></div></footer>
+  </div>;
 }
+
+const homeStyles = `
+.ts-site{--ts-bg:#090c13;--ts-panel:#101621;--ts-text:#f0f3fa;--ts-muted:#a8b3c7;--ts-line:#263044;--ts-accent:#b4a4ff;background:var(--ts-bg);color:var(--ts-text);font-size:16px;line-height:1.6;isolation:isolate}
+.ts-site *{box-sizing:border-box}.ts-site a{color:inherit;text-decoration:none}.ts-site button{font:inherit;cursor:pointer}.ts-site :is(a,button,summary,pre):focus-visible{outline:3px solid #c7baff;outline-offset:5px}.ts-site ::selection{background:#65539c;color:white}.ts-site h1,.ts-site h2,.ts-site h3,.ts-site p{margin:0}.ts-site h1,.ts-site h2,.ts-site h3{font-family:var(--font-display),var(--font-inter),sans-serif}.ts-site h2{font-size:clamp(30px,3.4vw,43px);line-height:1.15;font-weight:600;letter-spacing:-1.5px}.ts-container{width:min(1160px,calc(100% - 80px));margin-inline:auto}.ts-site section[id]{scroll-margin-top:100px}.ts-skip{position:fixed;top:12px;left:12px;z-index:100;background:#eee8ff;color:#121021!important;padding:12px 18px;transform:translateY(-160%);border-radius:8px}.ts-skip:focus{transform:translateY(0)}
+.ts-header{position:sticky;top:0;z-index:20;border-bottom:1px solid #202635;background:rgba(9,12,19,.94);backdrop-filter:blur(18px)}.ts-nav{height:80px;display:flex;align-items:center;justify-content:space-between;gap:22px}.ts-brand{display:inline-flex;align-items:center;gap:10px;font-size:21px;font-weight:650;letter-spacing:-.8px}.ts-brand-dot{color:#b4a4ff}.ts-mark{width:34px;height:36px;display:grid;place-items:center;background:linear-gradient(140deg,#789bf9,#a58ae9);color:#11162c;font-size:13px;letter-spacing:-1px;font-weight:800;border-radius:10px;box-shadow:inset 0 1px 0 #c5caff66}.ts-desktop-nav,.ts-nav-actions{display:flex;align-items:center;gap:26px}.ts-desktop-nav a,.ts-signin{font-size:13px;color:#bcc5d6!important}.ts-desktop-nav a:hover,.ts-signin:hover{color:white!important}.ts-nav-actions{gap:21px}.ts-button{display:inline-flex;align-items:center;justify-content:center;gap:20px;min-height:49px;padding:12px 21px;border-radius:9px;font-size:14px;font-weight:600;border:1px solid transparent;transition:background .16s,border-color .16s,box-shadow .16s}.ts-button svg{width:17px;flex-shrink:0}.ts-primary{background:#bcadff;color:#17122c!important;border-color:#c6baff;box-shadow:0 3px 0 #6e609144}.ts-primary:hover{background:#cfbfff;box-shadow:0 4px 22px #8f73ee28}.ts-secondary{background:#121824;border-color:#303a4f;color:#e0e6f1!important}.ts-secondary:hover{background:#1b2435;border-color:#67728c}.ts-nav-cta{min-height:40px;padding:8px 15px;font-size:12px;gap:12px}.ts-menu-button{display:none;background:#182030;border:1px solid #3d475d;color:#f0f3fa;border-radius:7px;padding:9px 13px;min-height:44px}.ts-mobile-nav{display:none}
+.ts-hero{display:grid;grid-template-columns:1.03fr 1fr;gap:64px;align-items:center;padding-block:86px 66px;position:relative}.ts-hero:before{content:"";position:absolute;z-index:-1;right:-25px;top:60px;width:52%;height:80%;background:radial-gradient(ellipse,#7460cf15,transparent 70%);pointer-events:none}.ts-eyebrow-pill{display:inline-flex;align-items:center;gap:9px;border:1px solid #34304c;background:#171426;color:#cfc7e9!important;border-radius:30px;padding:6px 11px;font-size:11px;letter-spacing:.1px}.ts-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#92dec1;flex-shrink:0}.ts-hero h1{font-size:clamp(48px,5.5vw,72px);line-height:1.02;font-weight:600;letter-spacing:-3.8px;margin-top:26px}.ts-hero h1>span{color:#b9a9ff}.ts-hero-lead{font-size:21px;line-height:1.5;letter-spacing:-.5px;margin-top:24px!important;color:#e4e8f2}.ts-hero-description{font-size:15px;line-height:1.8;color:var(--ts-muted);margin-top:14px!important;max-width:470px}.ts-actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:28px}.ts-helper{font-size:11px;line-height:1.7;color:#9daac0;margin-top:13px!important}.ts-hero-details{display:flex;flex-wrap:wrap;gap:19px;margin-top:28px;color:#b9c3d6;font-size:11px}.ts-hero-details span{display:flex;align-items:center;gap:6px}.ts-hero-details svg{width:13px;color:#b8aaff}
+.ts-preview{min-width:0;border:1px solid #39415b;border-radius:16px;background:linear-gradient(145deg,#151c2a,#0e1420);box-shadow:0 30px 70px #0005,0 0 60px #8771ce0b;overflow:hidden}.ts-preview-top{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:17px 20px;border-bottom:1px solid #2a3245;background:#ffffff03}.ts-preview-top>span:first-child{display:flex;align-items:center;gap:9px;font-size:12px;font-weight:500}.ts-small-mark{display:inline-grid;place-items:center;width:26px;height:26px;border:1px solid #7461a2;background:#302742;color:#d6c7ff;border-radius:7px;font-size:10px;font-weight:700}.ts-label{font-size:9px;letter-spacing:1.1px;color:#a4b0c7;font-weight:600}.ts-preview-body{padding:20px}.ts-demo-switch{padding:4px;background:#090f1b;border:1px solid #253147;border-radius:8px;display:flex;margin-bottom:20px}.ts-demo-switch button{flex:1;font-size:11px;font-weight:500;min-height:35px;border:0;border-radius:5px;color:#aeb9cc;background:transparent}.ts-demo-switch button[aria-pressed=true]{background:#283047;color:#fff;box-shadow:0 2px 8px #0003}.ts-prompt{padding:13px 15px;background:#090e18;border:1px solid #2a3346;border-radius:8px}.ts-prompt p{font-size:13px;margin-top:5px!important;color:#dde3f0}.ts-trace{padding:17px 0}.ts-trace>div{display:flex;align-items:center;gap:11px;position:relative;padding:11px 0}.ts-trace>div:not(:last-child):before{content:"";position:absolute;left:15px;top:43px;height:18px;border-left:1px dashed #4b4566}.ts-step-icon{display:grid;place-items:center;width:32px;height:32px;border:1px solid #413957;background:#221f34;color:#c4b4ff;border-radius:50%;flex-shrink:0}.ts-step-icon svg{width:15px}.ts-trace strong{display:block;font-size:12px;font-weight:500;color:#dfe5f1}.ts-trace small{display:block;font-size:10px;color:#a4b0c7;margin-top:2px}.ts-badge{font-size:9px;letter-spacing:1px;background:#222c3d;color:#bfcbdf;padding:3px 7px;border-radius:4px;margin-left:auto}.ts-green{color:#99e5c5!important;background:#142b29!important;border-color:#33564a!important}.ts-answer{border:1px solid #31574a;background:linear-gradient(110deg,#152b26,#101e20);border-radius:8px;padding:14px 15px}.ts-answer>.ts-label{color:#9cd6bf}.ts-answer p{font-size:14px;color:#eefbf5;margin-top:5px!important}.ts-answer>div{display:flex;align-items:center;gap:6px;font-size:10px;color:#a6d5c3;margin-top:12px}.ts-demo-note{font-size:10px;color:#9ba8bd;margin-top:12px!important}.ts-preview-bottom{padding:12px 20px;border-top:1px solid #293448;display:flex;align-items:center;justify-content:space-between;font-size:11px;color:#c0cada}.ts-preview-bottom a{display:grid;place-items:center;width:30px;height:30px;border-radius:6px;background:#2b2540;color:#c6b7ff}
+.ts-providers{padding:27px 0 32px;border-top:1px solid #253044;border-bottom:1px solid #253044;display:flex;justify-content:space-between;align-items:center;gap:30px}.ts-providers>p{font-size:9px;letter-spacing:1.5px;color:#a8b4cb;max-width:135px;line-height:1.8}.ts-providers>div{display:flex;align-items:center;justify-content:space-between;gap:54px}.ts-providers>div>span{display:flex;align-items:center;gap:10px;font-size:17px;letter-spacing:-.5px;color:#d6dce9;font-weight:500}.ts-section{padding-block:90px}.ts-section-heading{display:flex;justify-content:space-between;align-items:flex-end;gap:60px;margin-bottom:35px}.ts-kicker{font-size:10px;font-weight:600;letter-spacing:1.7px;color:#b6a7ef;margin-bottom:16px!important}.ts-section-heading>p{max-width:340px;color:var(--ts-muted);font-size:14px;line-height:1.8}.ts-flow{display:flex;align-items:center;justify-content:center;gap:30px;padding:27px;border:1px solid var(--ts-line);border-radius:13px;background:linear-gradient(110deg,#111621,#131724,#111621);margin-bottom:20px}.ts-flow>div{flex:1;display:flex;align-items:center;flex-direction:column;gap:5px;padding:9px;min-width:0}.ts-flow strong{font-size:13px;font-weight:500;margin-top:3px}.ts-flow small{font-size:11px;color:#a8b4c9;text-align:center}.ts-flow-symbol{color:#adbada;height:26px;display:grid;place-items:center}.ts-flow .ts-small-mark{width:32px;height:30px}.ts-flow-arrow{color:#71668c;font-size:23px}.ts-feature-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:15px}.ts-feature{padding:24px;border:1px solid var(--ts-line);border-radius:12px;background:linear-gradient(150deg,#131a26,#0e141f)}.ts-feature-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:28px}.ts-feature-icon{color:#c1b2fb;display:grid;place-items:center;width:38px;height:38px;border-radius:9px;background:#28223b;border:1px solid #3f3458}.ts-feature-number{font-size:11px;font-family:monospace;color:#8794ad}.ts-feature-tag{font-size:10px;color:#b2a4e2;margin-bottom:7px!important}.ts-feature h3{font-size:19px;letter-spacing:-.5px;line-height:1.4;font-weight:500;margin-bottom:11px}.ts-feature>p:last-child{font-size:13px;line-height:1.8;color:#aeb9cc}
+.ts-measure-band{border-block:1px solid #293044;background:#10141f}.ts-measure{display:grid;grid-template-columns:1fr 1fr;gap:110px;padding-block:58px}.ts-measure>div>p:not(.ts-kicker){font-size:14px;color:#b2bdd0;line-height:1.8;margin-top:18px;max-width:400px}.ts-text-link{display:inline-flex;align-items:center;gap:12px;color:#c4b4ff!important;font-size:13px;font-weight:500;margin-top:24px}.ts-text-link:hover{text-decoration:underline!important;text-underline-offset:4px}.ts-measure ol{list-style:none;margin:0;padding:0;display:grid;gap:24px;align-content:center}.ts-measure li{display:flex;gap:20px;align-items:flex-start}.ts-measure li>span{color:#bcacee;border:1px solid #443953;background:#211d30;display:grid;place-items:center;width:33px;height:33px;flex-shrink:0;border-radius:50%;font-size:10px;margin-top:3px}.ts-measure h3{font-size:17px;font-weight:500;letter-spacing:-.2px}.ts-measure li p{font-size:13px;color:#aeb9cd;margin-top:5px;line-height:1.7}
+.ts-integration{display:grid;grid-template-columns:.85fr 1.15fr;gap:78px;align-items:center}.ts-muted-heading{color:#a6b1c7}.ts-section-copy{font-size:14px;line-height:1.8;color:#aeb9ce;margin-top:23px!important;max-width:365px}.ts-integration-note{display:flex;gap:12px;border-left:2px solid #8971c9;padding:2px 0 2px 15px;margin-top:28px;max-width:365px}.ts-integration-note svg{flex-shrink:0;color:#b5a3e9;width:16px;margin-top:3px}.ts-integration-note p{font-size:12px;line-height:1.8;color:#b8c2d5}.ts-code-window{min-width:0;background:#0e1420;border:1px solid #313b50;border-radius:12px;overflow:hidden}.ts-code-header{padding:13px 18px;display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid #293146;font-size:12px}.ts-code-header>span>span{color:#96a5bf;font-size:10px}.ts-code-header button{background:#222b3d;border:1px solid #3c4760;color:#dee4f3;border-radius:5px;padding:6px 9px;font-size:10px;min-height:32px}.ts-code-window pre{font-size:11px;line-height:1.9;color:#d0c3fc;overflow-x:auto;padding:22px;margin:0;tab-size:2}.ts-code-window code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}.ts-code-footer{border-top:1px solid #293146;display:flex;align-items:center;gap:8px;padding:13px 18px;color:#b1bed3;font-size:10px}.ts-open-source{display:flex;align-items:center;gap:25px;padding:30px;border:1px solid #393248;border-radius:12px;background:linear-gradient(110deg,#191624,#111621)}.ts-open-icon{display:grid;place-items:center;width:56px;height:56px;flex-shrink:0;border:1px solid #504165;border-radius:13px;color:#c4aff6;background:#2a223a}.ts-open-icon svg{width:25px;height:25px}.ts-open-source .ts-kicker{margin-bottom:8px!important}.ts-open-source h2{font-size:24px;letter-spacing:-.6px}.ts-open-source p:not(.ts-kicker){font-size:12px;color:#abb8cc;margin-top:9px}.ts-open-links{margin-left:auto;flex-shrink:0;text-align:center}.ts-open-links>a:last-child{display:block;font-size:10px;color:#b1bfd4;margin-top:10px}
+.ts-centered-heading{text-align:center;max-width:700px;margin:0 auto 35px}.ts-centered-heading>p:last-child{font-size:14px;color:#abb8cf;margin-top:16px}.ts-pricing-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:17px}.ts-plan{border:1px solid #30394d;background:#111723;padding:27px;border-radius:13px;display:flex;flex-direction:column}.ts-plan-featured{background:linear-gradient(155deg,#211c34,#141925 65%);border-color:#8871bd;box-shadow:0 0 0 3px #8170b20c}.ts-plan-title{display:flex;align-items:center;justify-content:space-between;gap:8px}.ts-plan-title h3{font-size:19px;font-weight:500}.ts-plan-title>span{font-size:8px;letter-spacing:1px;color:#d3bfff;background:#342940;border:1px solid #5b456d;border-radius:4px;padding:3px 6px}.ts-plan-description{font-size:11px;color:#a7b5cd;margin-top:8px!important;min-height:36px}.ts-price{font-size:40px;font-weight:550;letter-spacing:-1.8px;margin-top:15px!important;font-family:var(--font-display),sans-serif}.ts-price>span{font-size:12px;font-weight:400;letter-spacing:0;color:#a5b2cb}.ts-plan-volume{font-size:11px;color:#b6c2d7;margin-bottom:23px!important;min-height:18px}.ts-plan>.ts-button{width:100%;font-size:12px;min-height:43px;justify-content:space-between}.ts-plan ul{list-style:none;padding:22px 0 0;margin:22px 0 0;border-top:1px solid #30374a;display:grid;gap:13px}.ts-plan li{display:flex;gap:9px;align-items:flex-start;font-size:11px;color:#bec8d9;line-height:1.7}.ts-plan li svg{width:14px;height:18px;flex-shrink:0;color:#b7a3f1}.ts-pricing-note{text-align:center;max-width:650px;margin:23px auto 0!important;font-size:11px;line-height:1.8;color:#a6b5cd}.ts-pricing-note a{text-decoration:underline!important;text-underline-offset:3px;color:#d1c1ff!important}
+.ts-faq{display:grid;grid-template-columns:.75fr 1.25fr;gap:90px;border-top:1px solid #283043;padding-top:65px}.ts-faq>div>p:not(.ts-kicker){font-size:13px;color:#aab9d0;margin-top:20px}.ts-faq details{border-bottom:1px solid #2c3548}.ts-faq summary{display:flex;justify-content:space-between;align-items:center;gap:20px;list-style:none;cursor:pointer;padding:20px 0;font-size:14px;color:#e0e6f1;font-weight:500}.ts-faq summary::-webkit-details-marker{display:none}.ts-faq summary>svg{width:16px;flex-shrink:0;color:#b9a6ef}.ts-faq details[open] summary>svg{transform:rotate(45deg)}.ts-faq details>p{font-size:13px;line-height:1.9;color:#b2bfd3;padding:0 30px 22px 0}.ts-final{display:flex;justify-content:space-between;align-items:center;gap:50px;padding:44px 48px;margin-bottom:75px;background:radial-gradient(ellipse at right,#53407c2e,transparent 65%),#171725;border:1px solid #443754;border-radius:15px}.ts-final h2{font-size:35px}.ts-final>div>p:not(.ts-kicker):not(.ts-helper){font-size:13px;color:#b7c0d1;margin-top:16px}.ts-final>div:last-child{flex-shrink:0;text-align:center}.ts-footer{border-top:1px solid #293044;padding:48px 0 22px;background:#0b1019}.ts-footer-grid{display:grid;grid-template-columns:1.3fr .8fr .8fr 1.2fr;gap:35px}.ts-footer-grid>div>p{font-size:13px;color:#b1bdd1;line-height:1.8;margin:16px 0}.ts-footer-note{font-size:10px;color:#9faec6}.ts-footer h3{font-size:11px;font-family:inherit;font-weight:500;color:#edf0f8;margin:4px 0 13px}.ts-footer nav>a{display:block;width:fit-content;font-size:11px;padding:5px 0;color:#a9b8cf}.ts-footer nav>a:hover{color:#e3d7ff}.ts-footer-bottom{display:flex;justify-content:space-between;gap:20px;border-top:1px solid #273044;margin-top:40px;padding-top:20px;font-size:10px;color:#97a8c2}
+@media(min-width:1450px){.ts-hero{padding-block:110px 85px}.ts-container{width:min(1200px,calc(100% - 100px))}.ts-hero h1{font-size:79px}}
+@media(max-width:1050px){.ts-container{width:calc(100% - 48px)}.ts-desktop-nav{gap:17px}.ts-nav-actions{gap:14px}.ts-hero{gap:30px;padding-top:60px}.ts-hero h1{font-size:60px}.ts-hero-lead{font-size:19px}.ts-providers>div{gap:25px}.ts-providers>div>span{font-size:15px}.ts-measure{gap:50px}.ts-integration{gap:40px}.ts-faq{gap:45px}.ts-plan{padding:22px}.ts-open-icon{display:none}}
+@media(max-width:800px){.ts-desktop-nav,.ts-signin{display:none}.ts-menu-button{display:block}.ts-mobile-nav{display:grid;grid-template-columns:1fr 1fr;gap:4px 18px;padding-bottom:16px}.ts-mobile-nav a{font-size:13px;padding:10px;color:#d0d7e7}.ts-nav{height:70px}.ts-hero{grid-template-columns:1fr;gap:38px;padding-block:48px}.ts-hero-copy{max-width:600px}.ts-hero h1{font-size:68px}.ts-hero-description{max-width:530px}.ts-preview{width:100%;max-width:570px;justify-self:center}.ts-providers{flex-direction:column;align-items:flex-start;gap:20px}.ts-providers>p{max-width:none}.ts-providers>div{width:100%;flex-wrap:wrap;gap:22px}.ts-section{padding-block:60px}.ts-section-heading{align-items:flex-start;flex-direction:column;gap:20px}.ts-section-heading>p{max-width:550px}.ts-feature-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.ts-measure{gap:35px}.ts-integration{grid-template-columns:1fr;gap:28px}.ts-section-copy,.ts-integration-note{max-width:550px}.ts-code-window pre{font-size:12px}.ts-open-source{align-items:flex-start;flex-direction:column}.ts-open-links{margin-left:0;text-align:left}.ts-pricing-grid{grid-template-columns:1fr;max-width:560px;margin-inline:auto}.ts-plan-description{min-height:0}.ts-plan{padding:28px}.ts-plan ul{grid-template-columns:1fr 1fr;column-gap:20px}.ts-faq{grid-template-columns:1fr;gap:28px}.ts-final{padding:32px;gap:28px;align-items:flex-start;flex-direction:column}.ts-final>div:last-child{text-align:left}.ts-footer-grid{grid-template-columns:1fr 1fr;gap:35px}.ts-footer-bottom{flex-direction:column;gap:8px}}
+@media(max-width:480px){.ts-container{width:calc(100% - 36px)}.ts-brand{font-size:18px;gap:8px}.ts-mark{width:29px;height:31px;font-size:11px}.ts-nav{gap:10px}.ts-nav-actions{gap:8px}.ts-nav-cta{font-size:10px;padding:8px 10px;min-height:42px}.ts-nav-cta svg{display:none}.ts-menu-button{font-size:11px;padding:8px 10px;min-height:42px}.ts-hero h1{font-size:58px;letter-spacing:-3px}.ts-hero-lead{font-size:19px}.ts-hero-description{font-size:14px}.ts-eyebrow-pill{font-size:10px}.ts-actions{gap:10px}.ts-actions .ts-button{font-size:12px;padding:12px 15px;gap:13px}.ts-helper{font-size:10px}.ts-hero-details{gap:14px;font-size:10px}.ts-preview-top{padding:14px}.ts-preview-top>span:first-child{font-size:11px}.ts-preview-top>.ts-label{font-size:8px;letter-spacing:.7px}.ts-preview-body{padding:14px}.ts-trace strong{font-size:11px}.ts-trace small{font-size:9px}.ts-answer p{font-size:13px}.ts-providers>div{display:grid;grid-template-columns:1fr 1fr;gap:23px}.ts-providers>div>span{font-size:15px}.ts-flow{gap:8px;padding:20px 7px}.ts-flow>div{padding:0}.ts-flow strong{font-size:10px}.ts-flow small{font-size:9px;max-width:85px}.ts-flow-arrow{font-size:16px}.ts-feature-grid{grid-template-columns:1fr}.ts-feature{padding:23px}.ts-feature-top{margin-bottom:17px}.ts-measure{grid-template-columns:1fr;gap:32px;padding-block:40px}.ts-site h2{font-size:31px;letter-spacing:-1px}.ts-code-header{padding:12px}.ts-code-window pre{padding:15px;font-size:10px}.ts-open-source{padding:24px}.ts-open-source h2{font-size:23px}.ts-plan ul{grid-template-columns:1fr}.ts-faq summary{font-size:13px}.ts-final{padding:27px 23px;margin-bottom:50px}.ts-final h2{font-size:30px}.ts-footer-grid{column-gap:18px}.ts-footer-grid>nav:last-child{grid-column:1/-1}.ts-footer nav>a{font-size:12px}}
+@media(prefers-reduced-motion:reduce){.ts-site *{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
+`;
