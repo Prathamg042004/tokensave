@@ -117,7 +117,7 @@ export default function Security() {
         </div>
 
         <div className="mt-12 text-center">
-          <p className="text-[#5A6577] text-[14px]">Questions? <a href="mailto:prathamg200404@gmail.com" className="text-[#5B8DEF] hover:underline">prathamg200404@gmail.com</a></p>
+          <p className="text-[#5A6577] text-[14px]">Questions? <a href="mailto:support@tokensave.in" className="text-[#5B8DEF] hover:underline">support@tokensave.in</a></p>
         </div>
       </div>
 
