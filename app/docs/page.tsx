@@ -385,7 +385,7 @@ print(response.json())`}</pre>
             <a href="/docs/api-reference" className="inline-flex items-center gap-2 bg-gray-900 border border-gray-800 rounded-lg px-4 py-2.5 text-sm text-cyan-400 hover:border-cyan-400/50 transition-colors">View Full API Reference →</a>
           </section>
             <h2 className="text-xl font-semibold mb-4 pb-2 border-b border-gray-800">Support</h2>
-            <p className="text-gray-400 text-sm">Questions or issues? Email <a href="mailto:prathamg200404@gmail.com" className="text-cyan-400 hover:underline">prathamg200404@gmail.com</a> or try the <a href="/playground" className="text-cyan-400 hover:underline">Playground</a> to test your integration.</p>
+            <p className="text-gray-400 text-sm">Questions or issues? Email <a href="mailto:support@tokensave.in" className="text-cyan-400 hover:underline">support@tokensave.in</a> or try the <a href="/playground" className="text-cyan-400 hover:underline">Playground</a> to test your integration.</p>
           </section>
 
         </div>
