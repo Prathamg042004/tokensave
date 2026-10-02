@@ -6,8 +6,8 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const space = Space_Grotesk({ subsets: ["latin"], variable: "--font-display", weight: ["400", "500", "600", "700"] });
 
 export const metadata: Metadata = {
-  title: "TokenSave — Cut Your AI API Costs by up to 40%",
-  description: "TokenSave is an intelligent middleware that reduces your Claude, GPT, Gemini, and Groq API bills through smart caching, model routing, and prompt compression.",
+  title: "TokenSave — Make every AI call count",
+  description: "Reduce wasted AI spend with response caching, cost-aware model routing, and prompt compression. Explore TokenSave's open-source JSON API for Anthropic, OpenAI, Gemini, and Groq.",
   icons: { icon: "/favicon.ico" },
 };
 
