@@ -1,141 +1,59 @@
-﻿"use client";
-import { useState, useEffect } from "react";
+"use client";
+import Link from "next/link";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "../supabase";
 import { useRouter } from "next/navigation";
 
+type Mode = "signin" | "signup" | "reset";
+function Mark() { return <svg width="25" height="25" viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M7 9h18M16 9v17M7 16h8M7 23h8" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/><path d="m21 20 3 3 5-6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>; }
+function Arrow() { return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M4 12h15m-5-5 5 5-5 5" strokeLinecap="round" strokeLinejoin="round"/></svg>; }
 export default function LoginPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [mode, setMode] = useState("signin");
-  const [loading, setLoading] = useState(false);
-  const [msg, setMsg] = useState({ text: "", type: "" });
-  const [showPw, setShowPw] = useState(false);
-  const [checking, setChecking] = useState(true);
-  const router = useRouter();
-
-  useEffect(() => { supabase.auth.getUser().then(({ data }) => { if (data.user) router.push("/dashboard"); else setChecking(false); }); }, [router]);
-
-  const validate = () => {
-    if (!email.trim()) { setMsg({ text: "Enter your email.", type: "e" }); return false; }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setMsg({ text: "Enter a valid email.", type: "e" }); return false; }
-    if (mode !== "reset" && !password) { setMsg({ text: "Enter your password.", type: "e" }); return false; }
-    if (mode === "signup" && password.length < 6) { setMsg({ text: "Password must be 6+ characters.", type: "e" }); return false; }
-    return true;
-  };
-
-  const submit = async () => {
-    setMsg({ text: "", type: "" });
-    if (!validate()) return;
-    setLoading(true);
-    if (mode === "reset") {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: "https://tokensave.vercel.app/dashboard" });
-      setLoading(false);
-      setMsg(error ? { text: error.message, type: "e" } : { text: "Reset link sent to " + email, type: "s" });
-      return;
-    }
-    if (mode === "signup") {
-      const { data, error } = await supabase.auth.signUp({ email, password });
-      setLoading(false);
-      if (error) { setMsg({ text: error.message.includes("already") ? "Email already registered. Try signing in." : error.message, type: "e" }); if (error.message.includes("already")) setTimeout(() => setMode("signin"), 2000); }
-      else if (data.user && data.session) { setMsg({ text: "Account created!", type: "s" }); setTimeout(() => router.push("/dashboard"), 800); }
-      else if (data.user?.identities?.length === 0) { setMsg({ text: "Email already registered.", type: "e" }); setTimeout(() => setMode("signin"), 2000); }
-      else { setMsg({ text: "Check " + email + " to verify.", type: "s" }); setTimeout(() => setMode("signin"), 3000); }
-      return;
-    }
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
-    if (error) setMsg({ text: error.message.includes("Invalid") ? "Wrong email or password." : error.message, type: "e" });
-    else { setMsg({ text: "Welcome back!", type: "s" }); setTimeout(() => router.push("/dashboard"), 800); }
-  };
-
-  const oauthLogin = async (provider: "github" | "google") => {
-    setLoading(true);
-    const { error } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo: "https://tokensave.vercel.app/dashboard" } });
-    if (error) { setMsg({ text: error.message, type: "e" }); setLoading(false); }
-  };
-
-  if (checking) return <div className="min-h-screen bg-[#0A0D12] flex items-center justify-center"><div className="w-5 h-5 border-2 border-[#5B8DEF] border-t-transparent rounded-full animate-spin" /></div>;
-
-  return (
-    <div className="min-h-screen bg-[#0A0D12] flex flex-col relative overflow-hidden">
-      <div className="absolute top-[-200px] left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-[#5B8DEF]/[0.03] rounded-full blur-[120px] pointer-events-none" />
-
-      <nav className="relative z-10 px-6 md:px-10 py-5">
-        <a href="/" className="flex items-center gap-2.5 w-fit">
-          <div className="w-8 h-8 bg-gradient-to-br from-[#5B8DEF] to-[#A78BFA] rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-[#5B8DEF]/20">TS</div>
-          <span className="text-lg font-semibold tracking-tight text-[#E8ECF4]">TokenSave</span>
-        </a>
-      </nav>
-
-      <div className="flex-1 flex items-center justify-center px-4 relative z-10">
-        <div className="w-full max-w-[400px]">
-          <div className="text-center mb-8">
-            <h1 className="text-[28px] font-bold tracking-tight text-white font-display">
-              {mode === "reset" ? "Reset password" : mode === "signup" ? "Create account" : "Welcome back"}
-            </h1>
-            <p className="text-[#5A6577] text-[14px] mt-2">
-              {mode === "reset" ? "We'll send a reset link" : mode === "signup" ? "Start your 14-day free trial" : "Sign in to your dashboard"}
-            </p>
-          </div>
-
-          {mode !== "reset" && (
-            <>
-              <div className="grid grid-cols-2 gap-3 mb-5">
-                <button onClick={() => oauthLogin("google")} disabled={loading} className="flex items-center justify-center gap-2.5 py-3 bg-white/[0.03] border border-white/[0.06] rounded-xl text-[13px] text-[#7A8599] hover:bg-white/[0.06] hover:border-white/[0.1] transition-all disabled:opacity-50">
-                  <svg width="16" height="16" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-                  Google
-                </button>
-                <button onClick={() => oauthLogin("github")} disabled={loading} className="flex items-center justify-center gap-2.5 py-3 bg-white/[0.03] border border-white/[0.06] rounded-xl text-[13px] text-[#7A8599] hover:bg-white/[0.06] hover:border-white/[0.1] transition-all disabled:opacity-50">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="#7A8599"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-                  GitHub
-                </button>
-              </div>
-              <div className="flex items-center gap-4 mb-5"><div className="flex-1 h-px bg-white/[0.06]" /><span className="text-[#3D4654] text-[11px]">or continue with email</span><div className="flex-1 h-px bg-white/[0.06]" /></div>
-            </>
-          )}
-
-          <div className="space-y-3">
-            <div>
-              <label className="text-[12px] text-[#5A6577] mb-1.5 block">Email</label>
-              <input type="email" placeholder="you@company.com" value={email} onChange={e => { setEmail(e.target.value); setMsg({ text: "", type: "" }); }} onKeyDown={e => e.key === "Enter" && (mode === "reset" ? submit() : document.getElementById("pw")?.focus())} className="w-full px-4 py-3 bg-white/[0.03] border border-white/[0.06] rounded-xl text-[#E8ECF4] placeholder-[#3D4654] text-[14px] focus:outline-none focus:border-[#5B8DEF]/40 transition-all" autoFocus />
-            </div>
-            {mode !== "reset" && (
-              <div>
-                <div className="flex justify-between mb-1.5">
-                  <label className="text-[12px] text-[#5A6577]">Password</label>
-                  {mode === "signin" && <button onClick={() => { setMode("reset"); setMsg({ text: "", type: "" }); }} className="text-[11px] text-[#3D4654] hover:text-[#5B8DEF] transition-colors">Forgot?</button>}
-                </div>
-                <div className="relative">
-                  <input id="pw" type={showPw ? "text" : "password"} placeholder={mode === "signup" ? "Min 6 characters" : "Your password"} value={password} onChange={e => { setPassword(e.target.value); setMsg({ text: "", type: "" }); }} onKeyDown={e => e.key === "Enter" && submit()} className="w-full px-4 py-3 bg-white/[0.03] border border-white/[0.06] rounded-xl text-[#E8ECF4] placeholder-[#3D4654] text-[14px] focus:outline-none focus:border-[#5B8DEF]/40 transition-all pr-14" />
-                  <button onClick={() => setShowPw(!showPw)} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#3D4654] hover:text-[#5A6577] text-[11px]">{showPw ? "Hide" : "Show"}</button>
-                </div>
-                {mode === "signup" && password.length > 0 && (
-                  <div className="flex gap-1 mt-2">{[2, 4, 6, 10].map((th, i) => <div key={i} className={`h-1 flex-1 rounded-full transition-colors ${password.length >= th ? (password.length >= 10 ? "bg-[#4ADE80]" : password.length >= 6 ? "bg-[#5B8DEF]" : "bg-[#E8B94B]") : "bg-white/[0.06]"}`} />)}</div>
-                )}
-              </div>
-            )}
-
-            {msg.text && (
-              <div className={`p-3.5 rounded-xl text-[13px] flex items-start gap-2.5 ${msg.type === "s" ? "bg-[#4ADE80]/5 border border-[#4ADE80]/10 text-[#4ADE80]" : msg.type === "i" ? "bg-[#5B8DEF]/5 border border-[#5B8DEF]/10 text-[#5B8DEF]" : "bg-[#FF5F57]/5 border border-[#FF5F57]/10 text-[#FF5F57]"}`}>
-                <span className="shrink-0 mt-0.5 text-[11px]">{msg.type === "s" ? "✓" : "!"}</span><span>{msg.text}</span>
-              </div>
-            )}
-
-            <button onClick={submit} disabled={loading} className="w-full py-3 bg-gradient-to-r from-[#5B8DEF] to-[#A78BFA] text-white font-semibold rounded-xl hover:opacity-90 transition-opacity disabled:opacity-50 text-[14px] flex items-center justify-center gap-2 mt-1 shadow-lg shadow-[#5B8DEF]/20">
-              {loading ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Please wait...</> : mode === "reset" ? "Send reset link" : mode === "signup" ? "Create account" : "Sign in"}
-            </button>
-          </div>
-
-          <div className="mt-6 text-center">
-            {mode === "signin" && <p className="text-[#5A6577] text-[13px]">No account? <button onClick={() => { setMode("signup"); setMsg({ text: "", type: "" }); setPassword(""); }} className="text-[#5B8DEF] hover:underline font-medium">Start free trial</button></p>}
-            {mode === "signup" && <p className="text-[#5A6577] text-[13px]">Have an account? <button onClick={() => { setMode("signin"); setMsg({ text: "", type: "" }); setPassword(""); }} className="text-[#5B8DEF] hover:underline font-medium">Sign in</button></p>}
-            {mode === "reset" && <p className="text-[#5A6577] text-[13px]">Remember it? <button onClick={() => { setMode("signin"); setMsg({ text: "", type: "" }); }} className="text-[#5B8DEF] hover:underline font-medium">Back to sign in</button></p>}
-          </div>
-
-          {mode === "signup" && <p className="mt-6 text-center text-[11px] text-[#3D4654]">By signing up you agree to our terms. Your API keys are never stored on our servers.</p>}
-        </div>
-      </div>
-      <footer className="relative z-10 px-6 py-6 text-center text-[#3D4654] text-[11px]">© 2026 TokenSave</footer>
-    </div>
-  );
+  const [email,setEmail]=useState("");
+  const [password,setPassword]=useState("");
+  const [mode,setMode]=useState<Mode>("signin");
+  const [pending,setPending]=useState<"email" | "google" | "github" | null>(null);
+  const [checking,setChecking]=useState(true);
+  const [showPw,setShowPw]=useState(false);
+  const [capsLock,setCapsLock]=useState(false);
+  const [msg,setMsg]=useState({text:"",type:""});
+  const [errors,setErrors]=useState({email:"",password:""});
+  const busy=useRef(false);
+  const emailRef=useRef<HTMLInputElement>(null);
+  const passwordRef=useRef<HTMLInputElement>(null);
+  const router=useRouter();
+  const disabled=checking || pending !== null;
+  useEffect(()=>{let active=true; supabase.auth.getUser().then(({data})=>{if(!active)return;if(data.user)router.replace("/dashboard");else setChecking(false);}).catch(()=>{if(active){setChecking(false);setMsg({text:"We could not check your session. You can try signing in below.",type:"e"});}});return()=>{active=false;};},[router]);
+  function switchMode(next:Mode){if(disabled)return;setMode(next);setPassword("");setShowPw(false);setCapsLock(false);setMsg({text:"",type:""});setErrors({email:"",password:""});emailRef.current?.focus();}
+  async function submit(){
+    if(busy.current || checking)return;
+    const address=email.trim();
+    const next={email:!address ? "Enter your email address." : !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address) ? "Enter a valid email address." : "",password:mode === "reset" ? "" : !password ? "Enter your password." : mode === "signup" && password.length < 6 ? "Use at least 6 characters." : ""};
+    setErrors(next);setMsg({text:"",type:""});
+    if(next.email || next.password){(next.email ? emailRef : passwordRef).current?.focus();return;}
+    busy.current=true;setPending("email");
+    try{
+      if(mode === "reset"){
+        const {error}=await supabase.auth.resetPasswordForEmail(address,{redirectTo:"https://tokensave.vercel.app/dashboard"});
+        setMsg(error ? {text:error.message,type:"e"} : {text:"If an account exists for this email, you will receive a password reset link. Check your inbox and spam folder.",type:"s"});
+      }else if(mode === "signup"){
+        const {data,error}=await supabase.auth.signUp({email:address,password});
+        if(error)setMsg({text:error.message.includes("already") ? "This email may already have an account. Try signing in or resetting your password." : error.message,type:"e"});
+        else if(data.user && data.session){router.push("/dashboard");setMsg({text:"Account created. Opening your dashboard…",type:"s"});}
+        else setMsg({text:"Check your inbox for the next step. If you already have an account, sign in instead.",type:"s"});
+      }else{
+        const {error}=await supabase.auth.signInWithPassword({email:address,password});
+        if(error)setMsg({text:error.message.includes("Invalid") ? "Email or password did not match. Try again, or reset your password." : error.message,type:"e"});
+        else {setMsg({text:"Signed in. Opening your dashboard…",type:"s"});router.push("/dashboard");}
+      }
+    }catch{setMsg({text:"We could not connect. Check your connection and try again.",type:"e"});}
+    finally{busy.current=false;setPending(null);}
+  }
+  async function oauthLogin(provider:"github" | "google"){
+    if(busy.current || checking)return;busy.current=true;setPending(provider);setMsg({text:"",type:""});
+    try{const {error}=await supabase.auth.signInWithOAuth({provider,options:{redirectTo:"https://tokensave.vercel.app/dashboard"}});if(error){setMsg({text:error.message,type:"e"});busy.current=false;setPending(null);}}
+    catch{setMsg({text:"Could not open the sign-in provider. Please try again.",type:"e"});busy.current=false;setPending(null);}
+  }
+  return <div className="auth-page"><style>{`
+.auth-page{min-height:100svh;background:#090d15;color:#eef2fa;font:15px/1.6 var(--font-inter),sans-serif;display:flex;flex-direction:column;isolation:isolate}.auth-page *{box-sizing:border-box}.auth-page a{color:inherit;text-decoration:none}.auth-page button,.auth-page input{font:inherit}.auth-page button{cursor:pointer}.auth-page button:disabled{cursor:wait;opacity:.55}.auth-page :is(a,button,input):focus-visible{outline:3px solid #c8b9ff;outline-offset:4px}.auth-page h1,.auth-page h2,.auth-page p{margin:0}.auth-page h1,.auth-page h2{font-family:var(--font-display),sans-serif}.auth-nav{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:25px 4.5%;border-bottom:1px solid #242d3d}.auth-brand{display:flex;align-items:center;gap:10px;font-size:21px;font-weight:650;letter-spacing:-.7px}.auth-mark{display:grid;place-items:center;width:35px;height:37px;border-radius:10px;background:linear-gradient(140deg,#a8d7d1,#b5a4ee);color:#151a2a}.auth-nav>a:last-child{font-size:13px;color:#b0bfd3;display:flex;gap:8px;align-items:center}.auth-nav>a:last-child:hover{color:#e4d9ff}.auth-layout{display:grid;grid-template-columns:1fr 1fr;max-width:1180px;width:calc(100% - 96px);margin:auto;gap:90px;align-items:center;padding:52px 0}.auth-story{position:relative;padding:32px 0;max-width:510px}.auth-kicker{display:flex;align-items:center;gap:8px;font-size:11px;letter-spacing:1.5px;font-weight:500;color:#a3d6ca}.auth-kicker:before{content:"";width:6px;height:6px;background:#a3d6ca;border-radius:50%}.auth-story h2{font-size:clamp(38px,4.2vw,56px);line-height:1.08;letter-spacing:-2.2px;font-weight:550;margin:23px 0}.auth-story h2 span{background:linear-gradient(100deg,#beaaff,#a9dcd5);color:transparent;background-clip:text;-webkit-background-clip:text}.auth-story>p{font-size:16px;color:#adbbd0;line-height:1.8;max-width:430px}.auth-art{margin:32px 0 27px;padding:25px;border:1px solid #393951;border-radius:15px;position:relative;overflow:hidden;background:radial-gradient(ellipse at top right,#63548030,transparent 70%),#121a27;box-shadow:0 20px 50px #0002}.auth-art-title{display:flex;justify-content:space-between;font-size:11px;color:#a9b7d0;letter-spacing:.5px}.auth-art-title span:last-child{color:#91bdaf;font-size:9px}.auth-route{display:flex;align-items:center;gap:0;margin:26px 0}.auth-node{display:flex;flex-direction:column;align-items:center;gap:8px;justify-content:center;width:78px;height:78px;background:#192333;border:1px solid #3a465e;border-radius:11px;flex-shrink:0;font-size:10px;color:#c5d1e4}.auth-node b{font-family:ui-monospace,monospace;font-size:19px;font-weight:500}.auth-node-core{background:#302a44;border-color:#8b77ac;color:#e0d2fb}.auth-wire{height:1px;background:linear-gradient(90deg,#5c4d79,#7ab3ab);flex:1;min-width:18px;position:relative}.auth-wire:after{content:"";width:5px;height:5px;position:absolute;left:50%;top:-2px;background:#c9b6fb;box-shadow:0 0 12px #c4aafa;border-radius:50%}.auth-art-foot{display:flex;gap:8px;flex-wrap:wrap}.auth-art-foot span{font-size:11px;padding:5px 10px;background:#1c2636;border:1px solid #344256;border-radius:6px;color:#b8c7dc}.auth-points{list-style:none;padding:0;margin:0;display:grid;gap:13px}.auth-points li{display:flex;gap:12px;align-items:center;color:#b8c6d9;font-size:14px}.auth-check{color:#a3d6ca}.auth-story-link{display:inline-flex;align-items:center;gap:10px;font-size:13px;color:#c3b2f7!important;margin-top:25px}.auth-story-link:hover{text-decoration:underline}.auth-card{width:100%;max-width:460px;justify-self:end;padding:35px;border:1px solid #354057;background:linear-gradient(145deg,#151c2a,#101722);border-radius:18px;box-shadow:0 25px 75px #0004;animation:auth-enter .5s ease-out both}.auth-card-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:26px}.auth-card-icon{display:grid;place-items:center;width:40px;height:40px;border-radius:10px;background:#29233e;border:1px solid #4d406b;color:#cbb9f7}.auth-card-top>span{font-size:10px;letter-spacing:1.5px;color:#a8b7d0}.auth-card h1{font-size:31px;letter-spacing:-1px;line-height:1.2;font-weight:550}.auth-intro{color:#aebcd1;font-size:14px;margin-top:11px!important;line-height:1.7}.auth-providers{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:27px}.auth-provider{min-height:47px;display:flex;align-items:center;justify-content:center;gap:10px;border:1px solid #424d62;border-radius:8px;background:#1a2434;color:#e5eaf5;font-size:13px!important;transition:background .16s,border-color .16s}.auth-provider:hover{background:#242e41;border-color:#8a7ba8}.auth-provider svg{flex-shrink:0}.auth-divider{display:flex;align-items:center;gap:13px;font-size:11px;color:#9daec7;margin:24px 0}.auth-divider:before,.auth-divider:after{content:"";height:1px;background:#354055;flex:1}.auth-form{display:grid;gap:19px}.auth-form-reset{margin-top:26px}.auth-label-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:12px}.auth-label-row label{font-size:13px;font-weight:500;color:#dce4f2}.auth-text-button{padding:0;min-height:26px;background:none;border:0;color:#c6b5f4;font-size:12px!important}.auth-text-button:hover{text-decoration:underline;text-underline-offset:3px}.auth-page input{width:100%;min-height:49px;padding:12px 14px;border:1px solid #455169;border-radius:8px;background:#0d1420;color:#f0f4fc;font-size:15px;transition:border-color .16s}.auth-page input::placeholder{color:#8191aa}.auth-page input:focus{border-color:#b2a0e9}.auth-page input[aria-invalid=true]{border-color:#ef9c9c}.auth-password{position:relative}.auth-password input{padding-right:67px}.auth-show{position:absolute;right:7px;top:5px;min-height:39px;padding:0 10px;border:0;border-radius:5px;background:transparent;color:#c5b7e9;font-size:12px!important}.auth-help{font-size:11px;color:#9bacc5;margin-top:7px!important}.auth-error{font-size:12px;color:#ffc0b7;margin-top:7px!important}.auth-message{padding:13px 14px;font-size:13px;line-height:1.65;border:1px solid #795052;background:#332025;color:#ffd2c9;border-radius:8px}.auth-message-success{background:#152e27;border-color:#456b5b;color:#b1ebd3}.auth-submit{display:flex;align-items:center;justify-content:center;gap:12px;min-height:49px;width:100%;padding:12px;border:1px solid #cdbdff;border-radius:8px;background:#beaeff;color:#1b1630;font-size:14px!important;font-weight:650;transition:background .16s,box-shadow .16s}.auth-submit:hover{background:#d0c2ff;box-shadow:0 5px 20px #b59aff18}.auth-switch{font-size:13px;text-align:center;color:#a9b8cf;padding-top:24px;margin-top:24px;border-top:1px solid #354056}.auth-switch button{font-size:13px!important;margin-left:5px}.auth-note{margin-top:20px!important;color:#9eafc8;font-size:11px;line-height:1.8;text-align:center}.auth-note a{color:#c9b8f8;text-decoration:underline;text-underline-offset:3px}.auth-status{font-size:12px;color:#b9c8de;margin-top:17px!important}.auth-footer{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:22px 4.5%;border-top:1px solid #253044;color:#95a7c3;font-size:12px}.auth-footer nav{display:flex;gap:23px}.auth-footer a:hover{color:#dbcdff}.auth-spinner{width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:auth-spin .7s linear infinite;display:inline-block}.auth-skip{position:fixed;top:10px;left:10px;padding:10px;background:#c6b7ff;color:#171126!important;z-index:30;transform:translateY(-160%)}.auth-skip:focus{transform:translateY(0)}@keyframes auth-spin{to{transform:rotate(360deg)}}@keyframes auth-enter{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}@media(max-width:1050px){.auth-layout{width:calc(100% - 64px);gap:45px}.auth-card{padding:28px}.auth-story h2{font-size:44px}.auth-node{width:64px;height:70px}.auth-art{padding:19px}}@media(max-width:800px){.auth-layout{grid-template-columns:1fr;width:calc(100% - 40px);gap:0;padding:36px 0}.auth-story{display:none}.auth-card{justify-self:center;max-width:460px}.auth-nav{padding:20px}.auth-footer{padding:20px;flex-wrap:wrap;justify-content:center}.auth-nav>a:last-child{font-size:12px}}@media(max-width:420px){.auth-card{padding:26px 21px;border-radius:14px}.auth-layout{width:calc(100% - 28px);padding:25px 0}.auth-card h1{font-size:28px}.auth-brand{font-size:19px}.auth-footer nav{gap:18px}.auth-providers{gap:9px}.auth-provider{font-size:12px!important}}@media(prefers-reduced-motion:reduce){.auth-page *{animation:none!important;transition:none!important}}
+`}</style><a className="auth-skip" href="#login-form">Skip to sign-in form</a><header className="auth-nav"><Link href="/" className="auth-brand" aria-label="TokenSave home"><span className="auth-mark"><Mark /></span>TokenSave.</Link><Link href="/">← Back to website</Link></header><main className="auth-layout"><aside className="auth-story" aria-label="About your TokenSave workspace"><span className="auth-kicker">YOUR AI WORKSPACE</span><h2>Less AI waste.<br /><span>More room to build.</span></h2><p>Bring your requests into focus. Explore model routing, caching and prompt optimization in one workspace.</p><div className="auth-art" aria-hidden="true"><div className="auth-art-title"><span>THE REQUEST PATH</span><span>ILLUSTRATION</span></div><div className="auth-route"><div className="auth-node"><b>&lt;/&gt;</b><span>Your app</span></div><div className="auth-wire"/><div className="auth-node auth-node-core"><Mark /><span>TokenSave</span></div><div className="auth-wire"/><div className="auth-node"><b>↗</b><span>AI provider</span></div></div><div className="auth-art-foot"><span>Cache</span><span>Route</span><span>Compress</span></div></div><ul className="auth-points"><li><span className="auth-check">✓</span> Inspect how requests are handled</li><li><span className="auth-check">✓</span> Explore with your own provider key</li><li><span className="auth-check">✓</span> Review the open-source implementation</li></ul><Link className="auth-story-link" href="/docs">Read the integration guide <Arrow /></Link></aside><section className="auth-card" aria-labelledby="auth-title"><div className="auth-card-top"><span className="auth-card-icon"><Mark /></span><span>{mode === "reset" ? "ACCOUNT RECOVERY" : "TOKENSAVE ACCOUNT"}</span></div><h1 id="auth-title">{mode === "reset" ? "Forgot your password?" : mode === "signup" ? "Create your account" : "Welcome back."}</h1><p className="auth-intro">{mode === "reset" ? "Enter the email you use for TokenSave. We’ll email you a link to reset your password." : mode === "signup" ? "Set up your TokenSave account to access your dashboard." : "Sign in to continue to your dashboard."}</p>{checking && <p className="auth-status" role="status">Checking your session…</p>}{mode !== "reset" && <><div className="auth-providers"><button type="button" className="auth-provider" disabled={disabled} onClick={()=>oauthLogin("google")} aria-label="Continue with Google"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>{pending === "google" ? "Opening…" : "Google"}</button><button type="button" className="auth-provider" disabled={disabled} onClick={()=>oauthLogin("github")} aria-label="Continue with GitHub"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.2 11.39.6.11.8-.26.8-.58v-2.23c-3.34.73-4.03-1.42-4.03-1.42-.55-1.39-1.33-1.76-1.33-1.76-1.09-.75.08-.73.08-.73 1.21.08 1.84 1.24 1.84 1.24 1.07 1.83 2.81 1.3 3.49 1 .11-.78.42-1.31.76-1.61-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.13-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23a11.48 11.48 0 0 1 6 0c2.3-1.55 3.3-1.23 3.3-1.23.66 1.66.25 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.81 5.63-5.48 5.93.43.37.82 1.1.82 2.22v3.29c0 .32.2.69.8.58A12 12 0 0 0 24 12C24 5.37 18.63 0 12 0z"/></svg>{pending === "github" ? "Opening…" : "GitHub"}</button></div><div className="auth-divider">or continue with email</div></>}<form id="login-form" className={mode === "reset" ? "auth-form auth-form-reset" : "auth-form"} noValidate onSubmit={e=>{e.preventDefault();void submit();}} aria-busy={disabled}><div><div className="auth-label-row"><label htmlFor="auth-email">Email address</label></div><input ref={emailRef} id="auth-email" name="email" type="email" autoComplete="email" inputMode="email" autoCapitalize="none" spellCheck={false} placeholder="you@company.com" value={email} disabled={disabled} onChange={e=>{setEmail(e.target.value);setErrors(v=>({...v,email:""}));setMsg({text:"",type:""});}} aria-invalid={!!errors.email} aria-describedby={errors.email ? "email-error" : undefined} required />{errors.email && <p className="auth-error" id="email-error">{errors.email}</p>}</div>{mode !== "reset" && <div><div className="auth-label-row"><label htmlFor="auth-password">Password</label>{mode === "signin" && <button type="button" className="auth-text-button" disabled={disabled} onClick={()=>switchMode("reset")}>Forgot password?</button>}</div><div className="auth-password"><input ref={passwordRef} id="auth-password" name="password" type={showPw ? "text" : "password"} autoComplete={mode === "signup" ? "new-password" : "current-password"} placeholder={mode === "signup" ? "Create a password" : "Enter your password"} value={password} disabled={disabled} onChange={e=>{setPassword(e.target.value);setErrors(v=>({...v,password:""}));setMsg({text:"",type:""});}} onKeyUp={e=>setCapsLock(e.getModifierState("CapsLock"))} onKeyDown={e=>setCapsLock(e.getModifierState("CapsLock"))} onBlur={()=>setCapsLock(false)} aria-invalid={!!errors.password} aria-describedby={[errors.password ? "password-error" : "",mode === "signup" ? "password-help" : "",capsLock ? "caps-lock" : ""].filter(Boolean).join(" ") || undefined} required /><button type="button" className="auth-show" disabled={disabled} aria-label={showPw ? "Hide password" : "Show password"} aria-pressed={showPw} onClick={()=>setShowPw(!showPw)}>{showPw ? "Hide" : "Show"}</button></div>{mode === "signup" && <p className="auth-help" id="password-help">At least 6 characters. A long, unique password is better.</p>}{capsLock && <p id="caps-lock" className="auth-help" role="status">Caps Lock is on.</p>}{errors.password && <p className="auth-error" id="password-error">{errors.password}</p>}</div>}{msg.text && <div className={msg.type === "s" ? "auth-message auth-message-success" : "auth-message"} role={msg.type === "e" ? "alert" : "status"}>{msg.text}</div>}<button type="submit" className="auth-submit" disabled={disabled}>{pending === "email" ? <><span className="auth-spinner" aria-hidden="true"/>Please wait…</> : checking ? "Checking session…" : <>{mode === "reset" ? "Send reset link" : mode === "signup" ? "Create account" : "Sign in"}<Arrow /></>}</button></form><div className="auth-switch">{mode === "signin" ? <>New to TokenSave?<button type="button" className="auth-text-button" disabled={disabled} onClick={()=>switchMode("signup")}>Create an account</button></> : <>{mode === "signup" ? "Already have an account?" : "Remember your password?"}<button type="button" className="auth-text-button" disabled={disabled} onClick={()=>switchMode("signin")}>{mode === "reset" ? "Back to sign in" : "Sign in instead"}</button></>}</div><p className="auth-note">{mode === "signup" ? <>Creating an account does not confirm a trial or subscription. <Link href="/#pricing">Review pricing and terms with us.</Link></> : <>Need a hand? <a href="https://mail.google.com/mail/?view=cm&fs=1&to=support%40tokensave.in">Contact support</a></>}</p></section></main><footer className="auth-footer"><span>© 2026 TokenSave</span><nav aria-label="Account help"><Link href="/security">Security &amp; data handling</Link><Link href="/docs">Documentation</Link></nav></footer></div>;
 }
