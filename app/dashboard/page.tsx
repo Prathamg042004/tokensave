@@ -225,9 +225,11 @@ export default function Dashboard() {
         .dash-step b {border:1px solid #bcadff40;color:#c5b5f5;border-radius:50%;width:25px;height:25px;text-align:center;font-size:11px;line-height:23px}
         .dash-enter {animation:dash-enter .3s ease both}
         .dash-shell .grid>div {min-width:0}
-        .dash-shell .grid>div>.rounded-2xl {height:100%}
+        .dash-shell .metric-grid>div>.rounded-2xl {height:100%}
         .dash-shell .max-w-2xl {max-width:850px}
         .dash-shell .font-display {font-family:inherit}
+        .dash-shell .metric-grid .uppercase {min-height:38px}
+        .dash-shell .metric-grid .font-display {margin-top:6px}
         .dash-shell table th {font-weight:500}
         .dash-shell table td {white-space:nowrap}
         .dash-shell code {overflow-wrap:anywhere}
@@ -253,7 +255,7 @@ export default function Dashboard() {
       <main id="dashboard-content" className="dash-content">
         <div className="dash-heading"><div><span className="dash-eyebrow">AI operations</span><h1>{({overview:"Workspace overview",keys:"API keys",logs:"Request logs",routing:"Model routing",settings:"Workspace settings"} as Record<string, string>)[tab]}</h1><p>{({overview:"Understand traffic. Inspect savings. Make your next request count.",keys:"Manage your integration credentials in one place.",logs:"Inspect the latest requests recorded by the service.",routing:"Review model preferences for simple and complex prompts.",settings:"Your account and local workspace preferences."} as Record<string, string>)[tab]}</p></div><div className="dash-actions"><button className="dash-secondary" disabled={refreshing} onClick={fetchStats}>{refreshing?"Refreshing…":"↻ Refresh data"}</button><a className="dash-primary" href="/playground">Open playground ↗</a></div></div>
         {statsError && <div className="dash-notice" role="alert">{statsError} <button onClick={fetchStats} disabled={refreshing}>Try again</button></div>}
-        <div className="dash-scope"><span><strong>Service-wide activity</strong> · Last 7 days · Not account-specific</span><span>{lastUpdated?"Updated "+lastUpdated:"Waiting for statistics"} · Refreshes every 15s</span></div>
+        <div className="dash-scope"><span><strong>Service-wide activity</strong> · {tab === "logs" ? "Latest 50 recorded requests" : "Last 7 days"} · Not account-specific</span><span>{lastUpdated?"Updated "+lastUpdated:"Waiting for statistics"} · Refreshes every 15s</span></div>
         {budgetLimit>0 && todayRequests>=budgetLimit*(budgetAlert/100) && <div className="dash-notice">Daily request reminder: {todayRequests.toLocaleString()} / {budgetLimit.toLocaleString()} service-wide requests. This is a local reminder, not a spending cap.</div>}
         {tab === "overview" && (
           <div className="space-y-6">
@@ -353,7 +355,7 @@ export default function Dashboard() {
                     <input aria-label={p.name + " API key"} autoComplete="off" type="password" placeholder={p.id === "anthropic" ? "sk-ant-..." : p.id === "openai" ? "sk-..." : p.id === "google" ? "AIza..." : "gsk_..."} value={(savedKeys as any)[p.id]} onChange={e => setSavedKeys({ ...savedKeys, [p.id]: e.target.value })} className="w-full px-4 py-3 bg-[#0A0D12] border border-white/[0.10] rounded-xl text-[13px] text-[#E8ECF4] placeholder-[#94a2b9] font-mono focus:outline-none focus:border-[#bba6ed]/30 transition-colors" />
                   </div>
                 ))}
-                <button onClick={() => { if (user) { localStorage.setItem("ts_keys_" + user.id, JSON.stringify(savedKeys)); setKeyMsg("Saved!"); setTimeout(() => setKeyMsg(""), 1500); } }} className="px-5 py-2.5 bg-gradient-to-r from-[#bba6ed] to-[#A78BFA] text-white rounded-xl text-[13px] font-semibold hover:opacity-90 shadow-lg shadow-[#bba6ed]/20">{keyMsg || "Save Keys"}</button>
+                <button onClick={() => { if (user) { localStorage.setItem("ts_keys_" + user.id, JSON.stringify(savedKeys)); setKeyMsg("Saved!"); setTimeout(() => setKeyMsg(""), 1500); } }} className="px-5 py-2.5 bg-gradient-to-r from-[#bba6ed] to-[#A78BFA] text-[#211a36] rounded-xl text-[13px] font-semibold hover:opacity-90 shadow-lg shadow-[#bba6ed]/20">{keyMsg || "Save Keys"}</button>
               </div>
             </div></FadeUp>
           </div>
@@ -383,7 +385,7 @@ export default function Dashboard() {
                 <div className="text-center py-16">
                   <p className="text-2xl mb-2">≡</p>
                   <p className="text-[#a9b5c8] text-[14px] mb-2">{logSearch || logFilter !== "all" ? "No matching requests" : "No requests logged yet"}</p>
-                  <a href="/playground" className="text-[#bba6ed] text-[13px] hover:underline">Send your first request →</a>
+                  {logSearch || logFilter !== "all" ? <button onClick={() => { setLogSearch(""); setLogFilter("all"); }} className="text-[#bba6ed] text-[13px]">Clear filters</button> : <a href="/playground" className="text-[#bba6ed] text-[13px] hover:underline">Send your first request →</a>}
                 </div>
               )}
             </div></FadeUp>
@@ -411,7 +413,7 @@ export default function Dashboard() {
                     </div>
                   </div>
                 ))}
-                <button onClick={() => { if (user) { localStorage.setItem("ts_routing_" + user.id, JSON.stringify(routingRules)); setRoutingMsg("Saved!"); setTimeout(() => setRoutingMsg(""), 1500); } }} className="px-5 py-2.5 bg-gradient-to-r from-[#bba6ed] to-[#A78BFA] text-white rounded-xl text-[13px] font-semibold hover:opacity-90 shadow-lg shadow-[#bba6ed]/20">{routingMsg || "Save local preferences"}</button>
+                <button onClick={() => { if (user) { localStorage.setItem("ts_routing_" + user.id, JSON.stringify(routingRules)); setRoutingMsg("Saved!"); setTimeout(() => setRoutingMsg(""), 1500); } }} className="px-5 py-2.5 bg-gradient-to-r from-[#bba6ed] to-[#A78BFA] text-[#211a36] rounded-xl text-[13px] font-semibold hover:opacity-90 shadow-lg shadow-[#bba6ed]/20">{routingMsg || "Save local preferences"}</button>
               </div>
             </div></FadeUp>
           </div>
@@ -434,7 +436,7 @@ export default function Dashboard() {
               <div className="space-y-3">
                 <div><label className="text-[12px] text-[#a9b5c8] block mb-1.5">Daily requests threshold</label><input aria-label="Daily request reminder threshold" min={1} type="number" value={budgetLimit} onChange={e => setBudgetLimit(Number(e.target.value))} className="w-full px-4 py-2.5 bg-[#0A0D12] border border-white/[0.10] rounded-xl text-[13px] text-[#E8ECF4] focus:outline-none focus:border-[#bba6ed]/30" /></div>
                 <div><label className="text-[12px] text-[#a9b5c8] block mb-1.5">Alert at</label><select aria-label="Reminder percentage" value={budgetAlert} onChange={e => setBudgetAlert(Number(e.target.value))} className="w-full px-4 py-2.5 bg-[#0A0D12] border border-white/[0.10] rounded-xl text-[13px] text-[#E8ECF4]"><option value={50}>50%</option><option value={75}>75%</option><option value={80}>80%</option><option value={90}>90%</option></select></div>
-                <button onClick={() => { if (user) { localStorage.setItem("ts_budget_" + user.id, JSON.stringify({ limit: budgetLimit, alertPercent: budgetAlert })); setBudgetMsg("Saved!"); setTimeout(() => setBudgetMsg(""), 1500); } }} className="px-5 py-2.5 bg-gradient-to-r from-[#bba6ed] to-[#A78BFA] text-white rounded-xl text-[13px] font-semibold hover:opacity-90 shadow-lg shadow-[#bba6ed]/20">{budgetMsg || "Save reminder"}</button>
+                <button onClick={() => { if (user) { localStorage.setItem("ts_budget_" + user.id, JSON.stringify({ limit: budgetLimit, alertPercent: budgetAlert })); setBudgetMsg("Saved!"); setTimeout(() => setBudgetMsg(""), 1500); } }} className="px-5 py-2.5 bg-gradient-to-r from-[#bba6ed] to-[#A78BFA] text-[#211a36] rounded-xl text-[13px] font-semibold hover:opacity-90 shadow-lg shadow-[#bba6ed]/20">{budgetMsg || "Save reminder"}</button>
                 {t.total_requests > 0 && budgetLimit > 0 && (
                   <div className="bg-[#0A0D12] rounded-xl p-4 mt-2">
                     <div className="flex justify-between text-[12px] mb-2"><span className="text-[#94a2b9]">Usage</span><span className={todayRequests >= budgetLimit * (budgetAlert / 100) ? "text-[#FF5F57]" : "text-[#a9b5c8]"}>{todayRequests}/{budgetLimit}</span></div>
