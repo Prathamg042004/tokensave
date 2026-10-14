@@ -27,3 +27,129 @@ body {
 .font-display {
   font-family: var(--font-display), system-ui, sans-serif;
 }
+
+/* Shared interaction language. Content is visible even when motion is disabled. */
+:root {
+  --ts-motion-fast: 160ms;
+  --ts-motion-enter: 360ms;
+  --ts-motion-ease: cubic-bezier(.2,.8,.2,1);
+}
+body :where(a, button, input, textarea, select, summary) {
+  -webkit-tap-highlight-color: transparent;
+}
+body :where(a, button, input, textarea, select, summary):focus-visible {
+  outline: 2px solid #c4b5fd;
+  outline-offset: 4px;
+}
+body :where(button, a, summary) {
+  transition-property: color, background-color, border-color, box-shadow, opacity, translate;
+  transition-duration: var(--ts-motion-fast);
+  transition-timing-function: var(--ts-motion-ease);
+}
+body :where(input, textarea, select) {
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+body :where(input, textarea, select):focus-visible {
+  box-shadow: 0 0 0 3px #bba6ed15;
+}
+
+/* Keep the older utility-based pages legible alongside the redesigned screens. */
+body > .min-h-screen:not(.dash-shell) :is(.text-gray-500, .text-gray-600) {
+  color: #9caac0;
+}
+body > .min-h-screen:not(.dash-shell) [class~="text-[#3D4654]"] {
+  color: #94a2b9;
+}
+body > .min-h-screen:not(.dash-shell) [class~="text-[#5A6577]"] {
+  color: #a9b5c8;
+}
+body > .min-h-screen:not(.dash-shell) [class~="text-[#7A8599]"] {
+  color: #b3bfd0;
+}
+body > .min-h-screen:not(.dash-shell) input::placeholder,
+body > .min-h-screen:not(.dash-shell) textarea::placeholder {
+  color: #8897ad;
+}
+
+/* Touch feedback does not depend on hover. */
+@media (prefers-reduced-motion: no-preference) {
+  body button:not(:disabled):active,
+  body a:is(.dash-primary, .dash-secondary, .auth-brand):active,
+  body summary:active {
+    translate: 0 1px;
+  }
+  body > .min-h-screen:not(.dash-shell) > div:not(.absolute),
+  .trust-site main {
+    animation: ts-page-enter var(--ts-motion-enter) var(--ts-motion-ease) both;
+  }
+  .auth-page .auth-story {
+    animation: ts-page-enter 450ms var(--ts-motion-ease) both;
+  }
+  .auth-page .auth-wire::after {
+    animation: ts-request-travel 1.4s ease-in-out 3;
+  }
+  .auth-page .auth-wire:nth-of-type(4)::after {
+    animation-delay: 180ms;
+  }
+  .auth-page .auth-node-core {
+    animation: ts-node-arrive 900ms ease-out 1;
+  }
+  .dash-shell .dash-sidebar nav button[aria-pressed="true"] {
+    animation: ts-selection 220ms ease-out;
+  }
+  .dash-shell .dash-heading h1 {
+    animation: ts-page-enter 300ms var(--ts-motion-ease) both;
+  }
+  .dash-shell .dash-setup {
+    animation: ts-page-enter 380ms var(--ts-motion-ease) both;
+  }
+  .dash-shell .dash-notice[role="alert"],
+  .auth-page :is(.auth-error, .auth-status) {
+    animation: ts-feedback 180ms ease-out;
+  }
+  @media (hover:hover) and (pointer:fine) {
+    body button:not(:disabled):hover,
+    body a:is(.dash-primary, .dash-secondary):hover {
+      translate: 0 -1px;
+    }
+    .dash-shell .dash-sidebar nav button:hover {
+      translate: 2px 0;
+    }
+    .auth-page .auth-provider:hover {
+      box-shadow: 0 5px 18px #0003;
+    }
+    .dash-shell .dash-setup:hover,
+    .auth-page .auth-art:hover {
+      border-color: #bba6ed66;
+    }
+  }
+}
+@keyframes ts-page-enter {
+  from { opacity: .65; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes ts-request-travel {
+  0% { translate: -14px 0; opacity: .35; }
+  70% { translate: 14px 0; opacity: 1; }
+  100% { translate: 0 0; opacity: 1; }
+}
+@keyframes ts-node-arrive {
+  from { box-shadow: 0 0 0 0 #bba6ed35; }
+  to { box-shadow: 0 0 0 12px #bba6ed00; }
+}
+@keyframes ts-selection {
+  from { box-shadow: inset 3px 0 #c4b5fd; }
+  to { box-shadow: inset 0 0 transparent; }
+}
+@keyframes ts-feedback {
+  from { opacity: .5; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body *, body *::before, body *::after {
+    animation: none !important;
+    transition-duration: 0s !important;
+    scroll-behavior: auto !important;
+  }
+}
+
