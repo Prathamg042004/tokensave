@@ -390,7 +390,7 @@
 }
 .resource-calculator {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 32px;
   border: 1px solid #4f4268;
   border-radius: 12px;
@@ -435,7 +435,7 @@
 }
 @media (max-width: 850px) {
   .resource-layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 28px;
   }
   .resource-toc {
@@ -450,10 +450,10 @@
     width: 100%;
   }
   .resource-cards {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .resource-calculator {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .resource-header {
     align-items: flex-start;
@@ -589,4 +589,9 @@
   .resource-controls .resource-button {
     font-size: 12px;
   }
+}
+
+.resource-layout > *,
+.resource-calculator > * {
+  min-width: 0;
 }
