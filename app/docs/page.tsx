@@ -1,397 +1,344 @@
-"use client";
-
+import type { Metadata } from "next";
+import Link from "next/link";
+import {
+  ResourceShell,
+  ResourceHero,
+  Note,
+  Section,
+  Fields,
+} from "../components/resource-shell";
+import CodeBlock from "../components/code-block";
+import { javascriptExample, routingModels } from "../lib/api-docs";
+export const metadata: Metadata = {
+  title: "Integration guide · TokenSave",
+  description:
+    "Integrate TokenSave's text JSON API, understand caching and routing, handle failures, and evaluate cost and output quality.",
+};
+const sections = [
+  ["quickstart", "Quick start"],
+  ["compatibility", "Compatibility"],
+  ["pipeline", "Request behavior"],
+  ["routing", "Models & quality"],
+  ["errors", "Errors & retries"],
+  ["measurement", "Measure results"],
+  ["production", "Before production"],
+];
 export default function Docs() {
-  const proxyUrl = "https://tokensave.vercel.app/api/proxy";
-
   return (
-    <div className="min-h-screen bg-[#08090C] text-gray-100 relative overflow-hidden">
-      <div className="absolute top-[-300px] right-[-200px] w-[600px] h-[600px] bg-blue-500/[0.02] rounded-full blur-[120px] pointer-events-none"></div>
-      <nav className="relative z-10 flex justify-between items-center px-6 md:px-10 py-4 border-b border-white/[0.04] max-w-[1000px] mx-auto">
-        <a href="/" className="flex items-center gap-2">
-          <div className="w-7 h-7 bg-gradient-to-br from-cyan-400 to-blue-500 rounded-md flex items-center justify-center text-gray-950 font-bold text-xs">TS</div>
-          <span className="text-lg font-bold">TokenSave</span>
-        </a>
-        <div className="flex gap-4">
-          <a href="/playground" className="text-sm text-gray-500 hover:text-gray-300">Playground</a>
-          <a href="/dashboard" className="text-sm text-gray-500 hover:text-gray-300">Dashboard</a>
+    <ResourceShell section="Docs">
+      <ResourceHero
+        eyebrow="DEVELOPER DOCUMENTATION"
+        title="From first request to informed decision."
+      >
+        <p>
+          Connect your server, inspect the result, and evaluate TokenSave
+          against your own cost and quality requirements.
+        </p>
+        <div className="resource-actions">
+          <Link className="resource-button" href="/docs/api-reference">
+            Explore the API reference →
+          </Link>
+          <Link
+            className="resource-button resource-button-secondary"
+            href="/playground"
+          >
+            Try the playground
+          </Link>
         </div>
-      </nav>
-
-      <div className="max-w-4xl mx-auto px-6 md:px-8 py-12">
-      <h1 className="text-[32px] font-bold mb-2 tracking-tight bg-gradient-to-b from-white to-gray-400 bg-clip-text text-transparent">API Documentation</h1>
-        <p className="text-gray-500 mb-10">Everything you need to integrate TokenSave into your application.</p>
-
-        <div className="space-y-12">
-
-          <section>
-            <h2 className="text-xl font-semibold mb-4 pb-2 border-b border-gray-800">Quick start</h2>
-            <p className="text-gray-400 text-sm mb-4 leading-relaxed">TokenSave works as a drop-in replacement for your AI provider's API endpoint. Replace one URL in your code and every request is automatically optimized through caching, smart model routing, and prompt compression.</p>
-            <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-800 bg-gray-900">
-                <span className="text-xs text-gray-500 font-mono">3-step setup</span>
-              </div>
-              <div className="p-4 space-y-4 text-sm">
-                <div className="flex gap-3">
-                  <span className="text-cyan-400 font-mono shrink-0">1.</span>
-                  <p className="text-gray-300">Sign up at <a href="/login" className="text-cyan-400 hover:underline">tokensave.vercel.app/login</a> and get your TokenSave API key from the dashboard.</p>
-                </div>
-                <div className="flex gap-3">
-                  <span className="text-cyan-400 font-mono shrink-0">2.</span>
-                  <p className="text-gray-300">Replace your AI provider URL with <span className="text-cyan-400 font-mono">{proxyUrl}</span></p>
-                </div>
-                <div className="flex gap-3">
-                  <span className="text-cyan-400 font-mono shrink-0">3.</span>
-                  <p className="text-gray-300">Pass your provider API key in the request body. That&apos;s it.</p>
-                </div>
-              </div>
+      </ResourceHero>
+      <div className="resource-layout">
+        <nav className="resource-toc" aria-label="On this page">
+          <strong>Integration guide</strong>
+          {sections.map(([id, title]) => (
+            <a key={id} href={`#${id}`}>
+              {title}
+            </a>
+          ))}
+        </nav>
+        <div>
+          <Note title="A custom JSON API for non-streaming text">
+            <p>
+              Changing the base URL of an OpenAI or Anthropic SDK is not
+              sufficient. Use HTTP requests with the schema below. Hosted
+              requests include prompts and provider credentials; start with
+              synthetic data and{" "}
+              <Link href="/security">review data handling</Link>.
+            </p>
+          </Note>
+          <Section id="quickstart" title="01 · Make your first request">
+            <ol>
+              <li>
+                Choose a provider: Anthropic, OpenAI, Google or Groq. Create a
+                provider key with an appropriate usage limit.
+              </li>
+              <li>
+                Store it in your server environment. For this example set{" "}
+                <code>OPENAI_API_KEY</code>. Never prefix secrets with{" "}
+                <code>NEXT_PUBLIC_</code> or commit them to source control.
+              </li>
+              <li>
+                Send the request below from Node.js 20+ on your server. A
+                TokenSave account is not required by the current proxy; provider
+                usage charges can apply.
+              </li>
+            </ol>
+            <CodeBlock
+              code={javascriptExample}
+              label="JavaScript · Node.js 20+"
+            />
+            <p>
+              A successful OpenAI request returns <code>choices</code> plus{" "}
+              <code>tokensave_meta</code>. Check the HTTP status before
+              rendering the answer. The reference also includes Python and cURL
+              examples.
+            </p>
+            <p>
+              Optional: <Link href="/login">sign in</Link> to explore the
+              dashboard. A <code>tsKey</code> currently supplies a rate-limit
+              identifier, not a verified subscription entitlement.
+            </p>
+          </Section>
+          <Section id="compatibility" title="02 · Know the supported surface">
+            <Fields
+              headings={[
+                "Capability",
+                "Current support",
+                "Integration consequence",
+              ]}
+              rows={[
+                [
+                  "Text messages",
+                  "Supported",
+                  "user, assistant and system string messages accepted by the proxy; each provider still has role restrictions.",
+                ],
+                [
+                  "Provider responses",
+                  "Native JSON",
+                  "Parse the response for your selected provider. Fallback may change its shape.",
+                ],
+                [
+                  "Streaming / SSE",
+                  "Not supported",
+                  "Wait for a complete JSON response.",
+                ],
+                [
+                  "Tool calling, images, audio, structured-output options",
+                  "Not forwarded",
+                  "Use the direct provider for workflows requiring these capabilities.",
+                ],
+                [
+                  "Provider parameters",
+                  "Limited",
+                  "model is supported. temperature, max_tokens and other extra fields are not forwarded; Anthropic output limit is fixed at 1024.",
+                ],
+                [
+                  "Context endpoints",
+                  "Separate operations",
+                  "Call trim-context or smart-context explicitly, review the returned messages, then send them to proxy.",
+                ],
+              ]}
+            />
+          </Section>
+          <Section id="pipeline" title="03 · Understand the request path">
+            <ol>
+              <li>
+                <strong>Validate and clean:</strong> messages and key are
+                validated, control characters stripped. Proxy accepts up to 100
+                messages and 100,000 characters per message. Declared body sizes
+                above 500,000 bytes are rejected.
+              </li>
+              <li>
+                <strong>Rate limit:</strong> a Redis-backed 60-request window of
+                60 seconds uses tsKey or client IP. It currently does not vary
+                by paid plan. Redis failure can disable enforcement.
+              </li>
+              <li>
+                <strong>Look up cached content:</strong> eligible responses are
+                stored for 30 minutes when Redis is available. Matching uses a
+                hash of cleaned roles and content, not semantic similarity.
+              </li>
+              <li>
+                <strong>Route and compress on a miss:</strong> complexity rules
+                choose a model, or your model override is used. Except in
+                max_quality, the final message may have whitespace and filler
+                phrases removed.
+              </li>
+              <li>
+                <strong>Call a provider:</strong> eligible rate/quota failures
+                can attempt supplied fallback credentials. All providers can
+                still fail; return errors to your application.
+              </li>
+              <li>
+                <strong>Return metadata:</strong> inspect cache status, selected
+                model and timing. Cost figures are estimates.
+              </li>
+            </ol>
+            <Note title="Cache matching needs production review">
+              <p>
+                The current cache key does not include provider, model, quality,
+                credentials or tenant identity. A repeated prompt may reuse a
+                response across these settings. There is no request-level cache
+                bypass or public purge API. Do not treat changing quality or
+                model as an isolated experiment, or use confidential
+                multi-tenant traffic without addressing isolation.
+              </p>
+            </Note>
+            <p>
+              Compression can remove line breaks and meaningful formatting.
+              Validate code, JSON, quoted text and formatting-sensitive tasks.{" "}
+              <code>max_quality</code> skips compression on a cache miss.
+            </p>
+          </Section>
+          <Section id="routing" title="04 · Choose your quality tradeoff">
+            <Fields
+              headings={["Provider identifier", "Simple path", "Capable path"]}
+              rows={routingModels}
+            />
+            <p>
+              These are model IDs configured in this repository, not a guarantee
+              of current availability for your provider account. Confirm access
+              with your provider before evaluating.
+            </p>
+            <Fields
+              headings={["Mode", "Routing", "Compression"]}
+              rows={[
+                [
+                  "auto",
+                  "Rule-based simple/complex classification",
+                  "Enabled for the final message when applicable.",
+                ],
+                [
+                  "max_savings",
+                  "Currently identical to auto",
+                  "Currently identical to auto.",
+                ],
+                [
+                  "max_quality",
+                  "Capable path unless model overrides it",
+                  "Skipped. Cache is still checked first.",
+                ],
+              ]}
+            />
+            <p>
+              Fallback tries configured credentials in Groq → Anthropic → OpenAI
+              → Google order, excluding the primary. It uses complexity-based
+              model selection and may not preserve the primary model override or
+              max_quality intent. Parse according to the returned provider.
+            </p>
+          </Section>
+          <Section id="errors" title="05 · Handle failures deliberately">
+            <Fields
+              headings={["Status", "Meaning", "Client action"]}
+              rows={[
+                [
+                  "400",
+                  "Proxy input validation failed",
+                  "Correct the body; do not retry unchanged.",
+                ],
+                [
+                  "413",
+                  "Declared request body exceeds 500,000 bytes",
+                  "Reduce the request size.",
+                ],
+                [
+                  "429",
+                  "TokenSave limit or upstream rate/quota failure",
+                  "For proxy limits honor Retry-After (60 seconds). Use bounded backoff with jitter; stop when your retry budget is exhausted.",
+                ],
+                [
+                  "Provider 4xx / 5xx",
+                  "Upstream error forwarded after eligible fallback attempts",
+                  "Inspect status; fix credentials or model access for auth/configuration failures.",
+                ],
+                [
+                  "500",
+                  "Parsing, transport or unexpected proxy failure",
+                  "Record safe diagnostics; consider a bounded retry or a direct-provider recovery path.",
+                ],
+              ]}
+            />
+            <p>
+              Set a client timeout. A timeout does not prove the provider
+              stopped processing; retrying can incur another charge. The current
+              API does not provide idempotency keys. Do not log credentials, raw
+              prompts or sensitive provider errors.
+            </p>
+            <p>
+              Success and proxy-rate-limit responses include{" "}
+              <code>X-RateLimit-Limit</code> and{" "}
+              <code>X-RateLimit-Remaining</code>. They are not guaranteed on
+              every error path. There is no stable universal error envelope;{" "}
+              <code>error</code> can be a string or provider object.
+            </p>
+          </Section>
+          <Section
+            id="measurement"
+            title="06 · Prove the benefit on your workload"
+          >
+            <ol>
+              <li>
+                Collect representative synthetic tasks and define an acceptable
+                answer for each.
+              </li>
+              <li>
+                Run a direct-provider baseline with your real production model
+                and record provider-reported usage, latency and task success.
+              </li>
+              <li>
+                Run an optimized evaluation, separating first requests from
+                repeated/cache-hit requests. Account for the cache-matching
+                limitation above.
+              </li>
+              <li>
+                Compare answer quality, provider invoices and latency
+                distributions. Include retries, fallback calls and integration
+                effort.
+              </li>
+              <li>
+                Calculate net benefit: actual provider savings − TokenSave
+                subscription − other operating costs.{" "}
+                <Link href="/pricing#calculator">
+                  Explore a pricing scenario
+                </Link>
+                .
+              </li>
+            </ol>
+            <p>
+              Token estimates use character counts; output estimates use a
+              truncated serialized provider payload. Cache-hit logs include
+              fixed savings placeholders. Neither dashboard totals nor{" "}
+              <code>savings_percent</code> are measured billing evidence. No
+              public reproducible savings benchmark is published yet.
+            </p>
+          </Section>
+          <Section
+            id="production"
+            title="07 · Prepare for a production evaluation"
+          >
+            <p>
+              Confirm authentication and tenant isolation, credential/log
+              redaction, cache behavior, retention and deletion, provider
+              availability, monitoring and recovery. Agree support and
+              commercial terms before purchasing. No standard SLA or compliance
+              certification is established by these docs.
+            </p>
+            <div className="resource-actions">
+              <Link
+                href="/security"
+                className="resource-button resource-button-secondary"
+              >
+                Security & data handling
+              </Link>
+              <a
+                href="mailto:support@tokensave.in?subject=TokenSave%20integration%20evaluation"
+                className="resource-button"
+              >
+                Discuss your integration →
+              </a>
             </div>
-          </section>
-
-          <section>
-            <h2 className="text-xl font-semibold mb-4 pb-2 border-b border-gray-800">POST /api/proxy</h2>
-            <p className="text-gray-400 text-sm mb-4">Send AI requests through the TokenSave optimization pipeline.</p>
-
-            <div className="mb-6">
-              <h3 className="text-sm font-semibold text-gray-300 mb-3">Request body</h3>
-              <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-gray-500 text-xs uppercase tracking-wider text-left border-b border-gray-800">
-                      <th className="px-4 py-3">Parameter</th>
-                      <th className="px-4 py-3">Type</th>
-                      <th className="px-4 py-3">Required</th>
-                      <th className="px-4 py-3">Description</th>
-                    </tr>
-                  </thead>
-                  <tbody className="text-gray-300">
-                    <tr className="border-b border-gray-800/50">
-                      <td className="px-4 py-3 font-mono text-cyan-400">provider</td>
-                      <td className="px-4 py-3 text-gray-500">string</td>
-                      <td className="px-4 py-3 text-gray-500">Yes</td>
-                      <td className="px-4 py-3 text-gray-400">&quot;anthropic&quot;, &quot;openai&quot;, &quot;google&quot;, or &quot;groq&quot;</td>
-                    </tr>
-                    <tr className="border-b border-gray-800/50">
-                      <td className="px-4 py-3 font-mono text-cyan-400">apiKey</td>
-                      <td className="px-4 py-3 text-gray-500">string</td>
-                      <td className="px-4 py-3 text-gray-500">Yes</td>
-                      <td className="px-4 py-3 text-gray-400">Your AI provider API key</td>
-                    </tr>
-                    <tr className="border-b border-gray-800/50">
-                      <td className="px-4 py-3 font-mono text-cyan-400">messages</td>
-                      <td className="px-4 py-3 text-gray-500">array</td>
-                      <td className="px-4 py-3 text-gray-500">Yes</td>
-                      <td className="px-4 py-3 text-gray-400">Array of message objects with role and content</td>
-                    </tr>
-                    <tr className="border-b border-gray-800/50">
-                      <td className="px-4 py-3 font-mono text-cyan-400">tsKey</td>
-                      <td className="px-4 py-3 text-gray-500">string</td>
-                      <td className="px-4 py-3 text-gray-500">No</td>
-                      <td className="px-4 py-3 text-gray-400">Your TokenSave API key for tracking and higher rate limits</td>
-                    </tr>
-                    <tr className="border-b border-gray-800/50">
-                      <td className="px-4 py-3 font-mono text-cyan-400">model</td>
-                      <td className="px-4 py-3 text-gray-500">string</td>
-                      <td className="px-4 py-3 text-gray-500">No</td>
-                      <td className="px-4 py-3 text-gray-400">Override auto-routing with a specific model name</td>
-                    </tr>
-                    <tr className="border-b border-gray-800/50">
-                      <td className="px-4 py-3 font-mono text-cyan-400">quality</td>
-                      <td className="px-4 py-3 text-gray-500">string</td>
-                      <td className="px-4 py-3 text-gray-500">No</td>
-                      <td className="px-4 py-3 text-gray-400">&quot;auto&quot; (default), &quot;max_savings&quot;, or &quot;max_quality&quot;</td>
-                    </tr>
-                    <tr className="border-b border-gray-800/50">
-                      <td className="px-4 py-3 font-mono text-cyan-400">fallbackKeys</td>
-                      <td className="px-4 py-3 text-gray-500">object</td>
-                      <td className="px-4 py-3 text-gray-500">No</td>
-                      <td className="px-4 py-3 text-gray-400">Backup provider keys for auto-fallback on rate limits</td>
-                    </tr>
-                    <tr className="border-b border-gray-800/50">
-                      <td className="px-4 py-3 font-mono text-cyan-400">tags</td>
-                      <td className="px-4 py-3 text-gray-500">object</td>
-                      <td className="px-4 py-3 text-gray-500">No</td>
-                      <td className="px-4 py-3 text-gray-400">Custom key-value pairs for filtering and analytics</td>
-                    </tr>
-                    <tr className="border-b border-gray-800/50">
-                      <td className="px-4 py-3 font-mono text-cyan-400">userId</td>
-                      <td className="px-4 py-3 text-gray-500">string</td>
-                      <td className="px-4 py-3 text-gray-500">No</td>
-                      <td className="px-4 py-3 text-gray-400">Your user ID for per-user analytics tracking</td>
-                    </tr>
-                    <tr>
-                      <td className="px-4 py-3 font-mono text-cyan-400">webhookUrl</td>
-                      <td className="px-4 py-3 text-gray-500">string</td>
-                      <td className="px-4 py-3 text-gray-500">No</td>
-                      <td className="px-4 py-3 text-gray-400">URL to receive POST notifications on each request</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div className="mb-6">
-              <h3 className="text-sm font-semibold text-gray-300 mb-3">Example — cURL</h3>
-              <pre className="bg-gray-900 border border-gray-800 rounded-xl p-4 text-sm text-gray-400 overflow-x-auto">{`curl -X POST ${proxyUrl} \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "provider": "anthropic",
-    "apiKey": "sk-ant-your-key",
-    "tsKey": "ts_live_your-tokensave-key",
-    "messages": [
-      { "role": "user", "content": "What is the capital of France?" }
-    ]
-  }'`}</pre>
-            </div>
-
-            <div className="mb-6">
-              <h3 className="text-sm font-semibold text-gray-300 mb-3">Example — JavaScript</h3>
-              <pre className="bg-gray-900 border border-gray-800 rounded-xl p-4 text-sm text-gray-400 overflow-x-auto">{`const response = await fetch("${proxyUrl}", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    provider: "anthropic",
-    apiKey: "sk-ant-your-key",
-    tsKey: "ts_live_your-tokensave-key",
-    messages: [
-      { role: "user", content: "What is the capital of France?" }
-    ]
-  })
-});
-
-const data = await response.json();
-console.log(data);`}</pre>
-            </div>
-
-            <div className="mb-6">
-              <h3 className="text-sm font-semibold text-gray-300 mb-3">Example — Python</h3>
-              <pre className="bg-gray-900 border border-gray-800 rounded-xl p-4 text-sm text-gray-400 overflow-x-auto">{`import requests
-
-response = requests.post(
-    "${proxyUrl}",
-    json={
-        "provider": "anthropic",
-        "apiKey": "sk-ant-your-key",
-        "tsKey": "ts_live_your-tokensave-key",
-        "messages": [
-            {"role": "user", "content": "What is the capital of France?"}
-        ]
-    }
-)
-
-print(response.json())`}</pre>
-            </div>
-
-            <div>
-              <h3 className="text-sm font-semibold text-gray-300 mb-3">Response</h3>
-              <p className="text-gray-400 text-sm mb-3">The response includes the original AI provider response plus a <span className="font-mono text-cyan-400">tokensave_meta</span> object with optimization details.</p>
-              <pre className="bg-gray-900 border border-gray-800 rounded-xl p-4 text-sm text-gray-400 overflow-x-auto">{`{
-  // Original AI provider response fields...
-  "tokensave_meta": {
-    "cache_hit": false,
-    "model_used": "claude-haiku-4-5-20251001",
-    "complexity": "simple",
-    "chars_saved": 12,
-    "method": "routed_to_cheap",
-    "rate_limit_remaining": 55
-  }
-}`}</pre>
-            </div>
-          </section>
-
-          <section>
-            <h2 className="text-xl font-semibold mb-4 pb-2 border-b border-gray-800">Optimization features</h2>
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-base font-semibold text-gray-200 mb-2">Semantic cache</h3>
-                <p className="text-gray-400 text-sm leading-relaxed">Identical requests are cached for 30 minutes. When a cache hit occurs, the response is returned instantly with zero API cost. The <span className="font-mono text-cyan-400">cache_hit</span> field in tokensave_meta indicates whether the response was served from cache.</p>
-              </div>
-              <div>
-                <h3 className="text-base font-semibold text-gray-200 mb-2">Model routing</h3>
-                <p className="text-gray-400 text-sm leading-relaxed mb-3">TokenSave analyzes each request and routes it to the most cost-effective model. Simple queries (short, factual) go to cheaper models; complex queries (coding, analysis, long-form) go to capable models.</p>
-                <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-gray-500 text-xs uppercase tracking-wider text-left border-b border-gray-800">
-                        <th className="px-4 py-3">Provider</th>
-                        <th className="px-4 py-3">Simple tasks</th>
-                        <th className="px-4 py-3">Complex tasks</th>
-                      </tr>
-                    </thead>
-                    <tbody className="text-gray-300">
-                      <tr className="border-b border-gray-800/50">
-                        <td className="px-4 py-3">Anthropic</td>
-                        <td className="px-4 py-3 font-mono text-green-400 text-xs">claude-haiku-4-5</td>
-                        <td className="px-4 py-3 font-mono text-cyan-400 text-xs">claude-sonnet-4</td>
-                      </tr>
-                      <tr className="border-b border-gray-800/50">
-                        <td className="px-4 py-3">OpenAI</td>
-                        <td className="px-4 py-3 font-mono text-green-400 text-xs">gpt-4o-mini</td>
-                        <td className="px-4 py-3 font-mono text-cyan-400 text-xs">gpt-4o</td>
-                      </tr>
-                      <tr>
-                        <td className="px-4 py-3">Google</td>
-                        <td className="px-4 py-3 font-mono text-green-400 text-xs">gemini-2.0-flash-lite</td>
-                        <td className="px-4 py-3 font-mono text-cyan-400 text-xs">gemini-2.0-flash</td>
-                      </tr>
-                      <tr>
-                        <td className="px-4 py-3">Groq</td>
-                        <td className="px-4 py-3 font-mono text-green-400 text-xs">llama-3.1-8b-instant</td>
-                        <td className="px-4 py-3 font-mono text-cyan-400 text-xs">llama-3.3-70b-versatile</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              <div>
-                <h3 className="text-base font-semibold text-gray-200 mb-2">Prompt compression</h3>
-                <p className="text-gray-400 text-sm leading-relaxed">Filler words, extra whitespace, and redundant phrases are automatically removed from prompts before forwarding. The <span className="font-mono text-cyan-400">chars_saved</span> field shows how many characters were compressed.</p>
-              </div>
-            </div>
-          </section>
-
-          <section>
-            <h2 className="text-xl font-semibold mb-4 pb-2 border-b border-gray-800">Rate limits</h2>
-            <p className="text-gray-400 text-sm leading-relaxed mb-3">The API enforces rate limits per TokenSave key (or per IP if no key is provided).</p>
-            <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-gray-500 text-xs uppercase tracking-wider text-left border-b border-gray-800">
-                    <th className="px-4 py-3">Plan</th>
-                    <th className="px-4 py-3">Rate limit</th>
-                    <th className="px-4 py-3">Cache TTL</th>
-                  </tr>
-                </thead>
-                <tbody className="text-gray-300">
-                  <tr className="border-b border-gray-800/50">
-                    <td className="px-4 py-3">Free trial</td>
-                    <td className="px-4 py-3">60 requests/minute</td>
-                    <td className="px-4 py-3">30 minutes</td>
-                  </tr>
-                  <tr className="border-b border-gray-800/50">
-                    <td className="px-4 py-3">Starter</td>
-                    <td className="px-4 py-3">200 requests/minute</td>
-                    <td className="px-4 py-3">60 minutes</td>
-                  </tr>
-                  <tr>
-                    <td className="px-4 py-3">Growth / Enterprise</td>
-                    <td className="px-4 py-3">Unlimited</td>
-                    <td className="px-4 py-3">Configurable</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            <p className="text-gray-500 text-sm mt-3">Rate limit headers <span className="font-mono text-gray-400">X-RateLimit-Remaining</span> and <span className="font-mono text-gray-400">X-RateLimit-Limit</span> are included in every response.</p>
-          </section>
-
-          <section>
-            <h2 className="text-xl font-semibold mb-4 pb-2 border-b border-gray-800">Error codes</h2>
-            <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-gray-500 text-xs uppercase tracking-wider text-left border-b border-gray-800">
-                    <th className="px-4 py-3">Code</th>
-                    <th className="px-4 py-3">Meaning</th>
-                  </tr>
-                </thead>
-                <tbody className="text-gray-300">
-                  <tr className="border-b border-gray-800/50">
-                    <td className="px-4 py-3 font-mono">400</td>
-                    <td className="px-4 py-3 text-gray-400">Missing required fields (messages, apiKey)</td>
-                  </tr>
-                  <tr className="border-b border-gray-800/50">
-                    <td className="px-4 py-3 font-mono">429</td>
-                    <td className="px-4 py-3 text-gray-400">Rate limit exceeded. Wait and retry.</td>
-                  </tr>
-                  <tr>
-                    <td className="px-4 py-3 font-mono">500</td>
-                    <td className="px-4 py-3 text-gray-400">Server error or AI provider error</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </section>
-          <section>
-            <h2 className="text-xl font-semibold mb-4 pb-2 border-b border-gray-800">POST /api/batch</h2>
-            <p className="text-gray-400 text-sm mb-4">Process multiple prompts in a single request. Maximum 50 prompts per batch.</p>
-            <pre className="bg-gray-900 border border-gray-800 rounded-xl p-4 text-sm text-gray-400 overflow-x-auto mb-4">{`curl -X POST https://tokensave.vercel.app/api/batch \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "provider": "groq",
-    "apiKey": "your-key",
-    "prompts": [
-      "What is 2+2?",
-      "Capital of France?",
-      "Translate hello to Spanish"
-    ]
-  }'`}</pre>
-            <p className="text-gray-400 text-sm">Response includes batch_id, success count, cache hits, processing time, and individual results for each prompt.</p>
-          </section>
-
-          <section>
-            <h2 className="text-xl font-semibold mb-4 pb-2 border-b border-gray-800">POST /api/trim-context</h2>
-            <p className="text-gray-400 text-sm mb-4">Automatically trim old messages from long conversations to fit within token limits.</p>
-            <pre className="bg-gray-900 border border-gray-800 rounded-xl p-4 text-sm text-gray-400 overflow-x-auto mb-4">{`curl -X POST https://tokensave.vercel.app/api/trim-context \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "maxTokens": 4000,
-    "messages": [
-      {"role": "system", "content": "You are helpful."},
-      {"role": "user", "content": "old message 1"},
-      {"role": "assistant", "content": "old reply 1"},
-      {"role": "user", "content": "latest question"}
-    ]
-  }'`}</pre>
-            <p className="text-gray-400 text-sm">Keeps system messages and the latest user message. Removes oldest conversation messages first until within the token limit.</p>
-          </section><section>
-            <h2 className="text-xl font-semibold mb-4 pb-2 border-b border-gray-800">POST /api/smart-context</h2>
-            <p className="text-gray-400 text-sm mb-4">Automatically summarize old messages in long conversations. A 50-message conversation (25,000 tokens) can be reduced to ~3,000 tokens (88% savings) while preserving all important context.</p>
-            <pre className="bg-gray-900 border border-gray-800 rounded-xl p-4 text-sm text-gray-400 overflow-x-auto mb-4">{`curl -X POST https://tokensave.vercel.app/api/smart-context \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "maxTokens": 4000,
-    "keepRecent": 6,
-    "messages": [
-      {"role": "user", "content": "message 1"},
-      {"role": "assistant", "content": "reply 1"},
-      ... (50 messages)
-      {"role": "user", "content": "latest question"}
-    ]
-  }'`}</pre>
-            <p className="text-gray-400 text-sm">Returns optimized messages with a summary replacing old messages. The most recent messages are kept in full.</p>
-          </section>
-
-          <section>
-            <h2 className="text-xl font-semibold mb-4 pb-2 border-b border-gray-800">Multi-provider fallback</h2>
-            <p className="text-gray-400 text-sm mb-4">If your primary provider hits a rate limit, TokenSave can automatically switch to another provider. Add fallback API keys to enable this:</p>
-            <pre className="bg-gray-900 border border-gray-800 rounded-xl p-4 text-sm text-gray-400 overflow-x-auto mb-4">{`fetch("https://tokensave.vercel.app/api/proxy", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    provider: "anthropic",
-    apiKey: "your-claude-key",
-    fallbackKeys: {
-      groq: "your-groq-key",
-      openai: "your-openai-key"
-    },
-    messages: [{ role: "user", content: "Hello" }]
-  })
-})`}</pre>
-            <p className="text-gray-400 text-sm">If Claude is rate limited, TokenSave automatically tries Groq, then OpenAI. The response includes which provider was used. Your users never see a rate limit error.</p>
-          </section>
-          <section className="pb-8">
-          <section>
-            <h2 className="text-xl font-semibold mb-4 pb-2 border-b border-gray-800">Code examples in 8 languages</h2>
-            <p className="text-gray-400 text-sm mb-4">View ready-to-copy integration examples in JavaScript, Python, Node.js, cURL, Ruby, PHP, Go, and Java.</p>
-            <a href="/docs/api-reference" className="inline-flex items-center gap-2 bg-gray-900 border border-gray-800 rounded-lg px-4 py-2.5 text-sm text-cyan-400 hover:border-cyan-400/50 transition-colors">View Full API Reference →</a>
-          </section>
-            <h2 className="text-xl font-semibold mb-4 pb-2 border-b border-gray-800">Support</h2>
-            <p className="text-gray-400 text-sm">Questions or issues? Email <a href="https://mail.google.com/mail/?view=cm&fs=1&to=support%40tokensave.in" className="text-cyan-400 hover:underline">support@tokensave.in</a> or try the <a href="/playground" className="text-cyan-400 hover:underline">Playground</a> to test your integration.</p>
-          </section>
-
+          </Section>
         </div>
       </div>
-
-      <footer className="border-t border-gray-800 max-w-4xl mx-auto px-6 md:px-8 py-8 flex flex-col md:flex-row justify-between items-center gap-4 text-gray-600 text-sm"><p>© 2026 TokenSave</p><div className="flex gap-4"><a href="/docs" className="hover:text-gray-400">Docs</a><a href="/security" className="hover:text-gray-400">Security</a><a href="/changelog" className="hover:text-gray-400">Changelog</a><a href="/status" className="hover:text-gray-400">Status</a></div></footer>
-    </div>
+    </ResourceShell>
   );
 }

@@ -17,7 +17,9 @@
     "test:coverage": "node --test --experimental-test-coverage",
     "verify": "npm run typecheck && npm run lint && npm test && npm run build",
     "health": "curl -s https://tokensave.vercel.app/api/health | node -e \"const d=require('fs').readFileSync('/dev/stdin','utf8');const j=JSON.parse(d);console.log('Status:',j.status);Object.entries(j.services).forEach(([k,v])=>console.log(' ',k+':',v.status))\"",
-    "check": "echo 'Checking all endpoints...' && curl -s -o /dev/null -w '%{http_code}' https://tokensave.vercel.app && echo ' Landing: OK' && curl -s -o /dev/null -w '%{http_code}' https://tokensave.vercel.app/api/proxy && echo ' Proxy: OK' && curl -s -o /dev/null -w '%{http_code}' https://tokensave.vercel.app/api/health && echo ' Health: OK'"
+    "check": "echo 'Checking all endpoints...' && curl -s -o /dev/null -w '%{http_code}' https://tokensave.vercel.app && echo ' Landing: OK' && curl -s -o /dev/null -w '%{http_code}' https://tokensave.vercel.app/api/proxy && echo ' Proxy: OK' && curl -s -o /dev/null -w '%{http_code}' https://tokensave.vercel.app/api/health && echo ' Health: OK'",
+    "docs:generate": "node scripts/generate-openapi.mjs",
+    "docs:check": "node scripts/generate-openapi.mjs --check"
   },
   "dependencies": {
     "@sentry/nextjs": "^10.75.0",
@@ -29,11 +31,16 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.8",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "ajv": "^6.15.0",
     "eslint": "^9",
     "eslint-config-next": "16.4.2",
+    "jsdom": "^26.1.0",
+    "prettier": "^3.9.10",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

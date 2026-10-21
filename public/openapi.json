@@ -1,0 +1,1164 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "TokenSave integration API",
+    "version": "3.1.0",
+    "description": "Custom non-streaming text API. This contract documents recommended inputs and current response shapes, not a production assurance. No verified authentication scheme is supplied by tsKey. Native provider responses vary; cache isolation needs review. Synthetic-data evaluation is recommended. Dashboard management routes are intentionally outside this integration contract."
+  },
+  "servers": [
+    {
+      "url": "https://www.tokensave.in"
+    }
+  ],
+  "security": [],
+  "paths": {
+    "/api/proxy": {
+      "post": {
+        "operationId": "proxy",
+        "summary": "Optimize a text request",
+        "description": "Returns the selected provider's JSON payload with tokensave_meta. Responses are not normalized across providers. No streaming, images, tools or arbitrary provider options are forwarded.\n\nIllustrative values only. Cost and token metadata are estimates; the expensive-model comparison is not a measured direct-provider baseline. Cache-hit metadata has a different shape and may omit model_used, complexity and token counts.",
+        "tags": [
+          "Integration"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful JSON response; examples are illustrative.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProxyResponse"
+                },
+                "examples": {
+                  "success": {
+                    "summary": "Illustrative success; not measured performance",
+                    "value": {
+                      "choices": [
+                        {
+                          "message": {
+                            "role": "assistant",
+                            "content": "Tokyo."
+                          }
+                        }
+                      ],
+                      "tokensave_meta": {
+                        "request_id": "req_example",
+                        "cache_hit": false,
+                        "model_used": "gpt-4o-mini",
+                        "complexity": "simple",
+                        "chars_saved": 0,
+                        "quality_mode": "auto",
+                        "latency_ms": 420,
+                        "method": "routed_to_cheap",
+                        "cost": 0.000003,
+                        "cost_without_optimization": 0.00005,
+                        "savings_percent": 94,
+                        "input_tokens": 8,
+                        "output_tokens": 3,
+                        "tags": {}
+                      }
+                    }
+                  },
+                  "Cache_hit": {
+                    "summary": "Cache hit",
+                    "value": {
+                      "choices": [
+                        {
+                          "message": {
+                            "role": "assistant",
+                            "content": "Tokyo."
+                          }
+                        }
+                      ],
+                      "tokensave_meta": {
+                        "request_id": "req_cache_example",
+                        "cache_hit": true,
+                        "tokens_saved": "100%",
+                        "method": "cache",
+                        "quality_mode": "auto",
+                        "latency_ms": 12,
+                        "cost": 0,
+                        "tags": {}
+                      }
+                    }
+                  },
+                  "Fallback_to_Groq": {
+                    "summary": "Fallback to Groq",
+                    "value": {
+                      "choices": [
+                        {
+                          "message": {
+                            "role": "assistant",
+                            "content": "Tokyo."
+                          }
+                        }
+                      ],
+                      "tokensave_meta": {
+                        "request_id": "req_fallback_example",
+                        "cache_hit": false,
+                        "model_used": "llama-3.1-8b-instant",
+                        "complexity": "simple",
+                        "chars_saved": 0,
+                        "quality_mode": "auto",
+                        "method": "fallback",
+                        "latency_ms": 900,
+                        "original_provider": "openai",
+                        "fallback_provider": "groq",
+                        "cost": 0.000001,
+                        "cost_without_optimization": 0.00001,
+                        "savings_percent": 90,
+                        "input_tokens": 8,
+                        "output_tokens": 3,
+                        "tags": {}
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-RateLimit-Limit": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Configured proxy window limit."
+              },
+              "X-RateLimit-Remaining": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Remaining requests in this Redis window."
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "messages array is required and must not be empty"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Upstream authentication failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "message": "Invalid API key",
+                    "type": "invalid_request_error"
+                  },
+                  "tokensave_meta": {
+                    "request_id": "req_error_example",
+                    "cache_hit": false,
+                    "model_used": "gpt-4o-mini",
+                    "complexity": "simple",
+                    "chars_saved": 0,
+                    "quality_mode": "auto",
+                    "latency_ms": 200,
+                    "is_error": true,
+                    "tags": {},
+                    "note": "Error from openai."
+                  }
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Declared body too large (middleware)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "message": "Request body too large. Maximum 500KB.",
+                    "code": 413
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Proxy rate limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Rate limit exceeded. Maximum 60 requests per minute."
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "60 seconds for the proxy limiter; upstream failures may omit it."
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected proxy failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "TokenSave proxy error: Example transport failure"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Other upstream HTTP errors can be forwarded; shape is provider-dependent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProxyRequest"
+              },
+              "example": {
+                "provider": "openai",
+                "apiKey": "YOUR_PROVIDER_KEY",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": "What is the capital of Japan?"
+                  }
+                ],
+                "quality": "auto"
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "discovery",
+        "summary": "Discover proxy capabilities",
+        "description": "Lists API version, provider identifiers, models and endpoint links. Treat this page's limitations as part of the integration guide; discovery descriptions may be broader than implemented behavior.\n\nDiscovery example shows selected fields. The actual response also includes configured model IDs, endpoint URLs, quality-mode descriptions and feature descriptions. It is not a verified runtime capability test.",
+        "tags": [
+          "Integration"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful JSON response; examples are illustrative.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Discovery"
+                },
+                "examples": {
+                  "success": {
+                    "summary": "Illustrative success; not measured performance",
+                    "value": {
+                      "status": "active",
+                      "service": "TokenSave API Proxy",
+                      "version": "3.1.0",
+                      "providers": [
+                        "anthropic",
+                        "openai",
+                        "google",
+                        "groq"
+                      ],
+                      "rate_limit": "60 requests/minute"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/batch": {
+      "post": {
+        "operationId": "batch",
+        "summary": "Process a batch",
+        "description": "Processes prompts sequentially through the proxy. This is a synchronous response, not a background job or a provider Batch API discount.\n\nInspect every response.error and response.tokensave_meta.is_error: the current batch handler can label an upstream HTTP error as success. tsKey, model, quality, tags and fallbackKeys are not forwarded. It currently calls the legacy tokensave.vercel.app proxy host; evaluate this limitation before adopting batch.",
+        "tags": [
+          "Integration"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful JSON response; examples are illustrative.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchResponse"
+                },
+                "examples": {
+                  "success": {
+                    "summary": "Illustrative success; not measured performance",
+                    "value": {
+                      "batch_id": "batch_example",
+                      "total": 1,
+                      "successful": 1,
+                      "cached": 0,
+                      "processing_time_ms": 900,
+                      "results": [
+                        {
+                          "prompt": "What is 2+2?",
+                          "status": "success",
+                          "response": {
+                            "choices": [
+                              {
+                                "message": {
+                                  "content": "4"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Declared body too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Proxy or provider rate/quota limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Parsing or unexpected failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchRequest"
+              },
+              "example": {
+                "provider": "openai",
+                "apiKey": "YOUR_PROVIDER_KEY",
+                "prompts": [
+                  "What is 2+2?"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/trim-context": {
+      "post": {
+        "operationId": "trim_context",
+        "summary": "Trim conversation history",
+        "description": "Keeps system messages and the final message, then fits earlier non-system messages from newest to oldest. Returns messages; it does not call an AI provider.\n\nA target, not a strict token ceiling: retained system/final messages may already exceed it. Counts are estimates, not a model tokenizer. Recheck output before sending it onward.",
+        "tags": [
+          "Integration"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful JSON response; examples are illustrative.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrimResponse"
+                },
+                "examples": {
+                  "success": {
+                    "summary": "Illustrative success; not measured performance",
+                    "value": {
+                      "original_messages": 2,
+                      "trimmed_messages": 2,
+                      "messages_removed": 0,
+                      "original_tokens": 5,
+                      "final_tokens": 5,
+                      "tokens_saved": 0,
+                      "trimmed": [
+                        {
+                          "role": "system",
+                          "content": "Be concise."
+                        },
+                        {
+                          "role": "user",
+                          "content": "Hello"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Declared body too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Proxy or provider rate/quota limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Parsing or unexpected failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrimRequest"
+              },
+              "example": {
+                "messages": [
+                  {
+                    "role": "system",
+                    "content": "Be concise."
+                  },
+                  {
+                    "role": "user",
+                    "content": "Hello"
+                  }
+                ],
+                "maxTokens": 4000
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/smart-context": {
+      "post": {
+        "operationId": "smart_context",
+        "summary": "Summarize older messages",
+        "description": "Uses deterministic text extraction, not an LLM: collects recent topic snippets, decision phrases and a small code block from older messages. Keeps system messages and recent conversation turns.\n\nOn optimization returns optimized:true, original_messages, optimized_messages, messages_summarized, messages_kept, token estimates, percent_saved and messages. Summary may lose details, exceed the target or even increase tokens. No fixed savings or quality guarantee.",
+        "tags": [
+          "Integration"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful JSON response; examples are illustrative.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SmartResponse"
+                },
+                "examples": {
+                  "success": {
+                    "summary": "Illustrative success; not measured performance",
+                    "value": {
+                      "optimized": false,
+                      "reason": "Already within token limit",
+                      "original_tokens": 2,
+                      "final_tokens": 2,
+                      "tokens_saved": 0,
+                      "percent_saved": 0,
+                      "messages": [
+                        {
+                          "role": "user",
+                          "content": "Hello"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Declared body too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Proxy or provider rate/quota limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Parsing or unexpected failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SmartRequest"
+              },
+              "example": {
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": "Hello"
+                  }
+                ],
+                "maxTokens": 4000,
+                "keepRecent": 6
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "operationId": "health",
+        "summary": "Check infrastructure",
+        "description": "Checks server/Redis availability. A passing response does not test authentication, billing or provider generation.",
+        "tags": [
+          "Integration"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful JSON response; examples are illustrative.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                },
+                "examples": {
+                  "success": {
+                    "summary": "Illustrative success; not measured performance",
+                    "value": {
+                      "status": "healthy",
+                      "timestamp": "2026-10-21T08:00:00.000Z",
+                      "version": "3.1.0",
+                      "services": {
+                        "redis": {
+                          "status": "connected",
+                          "latency_ms": 12
+                        },
+                        "proxy": {
+                          "status": "running"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Redis not configured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                },
+                "example": {
+                  "status": "degraded",
+                  "timestamp": "2026-10-21T08:00:00.000Z",
+                  "version": "3.1.0",
+                  "services": {
+                    "redis": {
+                      "status": "not_configured"
+                    },
+                    "proxy": {
+                      "status": "running"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Message": {
+        "type": "object",
+        "required": [
+          "role",
+          "content"
+        ],
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "user",
+              "assistant",
+              "system"
+            ]
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100000
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProxyRequest": {
+        "type": "object",
+        "required": [
+          "apiKey",
+          "messages"
+        ],
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "anthropic",
+              "openai",
+              "google",
+              "groq"
+            ],
+            "default": "anthropic"
+          },
+          "apiKey": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 500,
+            "writeOnly": true
+          },
+          "messages": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/Message"
+            }
+          },
+          "tsKey": {
+            "type": "string",
+            "description": "Rate-limit bucket identifier only. Not verified authentication."
+          },
+          "model": {
+            "type": "string"
+          },
+          "quality": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "max_savings",
+              "max_quality"
+            ],
+            "default": "auto",
+            "description": "Documented values. Current runtime does not validate this enum; max_savings follows auto."
+          },
+          "fallbackKeys": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "writeOnly": true
+            }
+          },
+          "tags": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "First 20 entries considered; key/value truncation applies."
+          },
+          "userId": {
+            "type": "string",
+            "description": "Analytics identifier, not authenticated identity."
+          },
+          "webhookUrl": {
+            "type": "string",
+            "format": "uri",
+            "description": "Best-effort unsigned metadata delivery to an endpoint you control."
+          }
+        },
+        "additionalProperties": true
+      },
+      "ProxyResponse": {
+        "type": "object",
+        "required": [
+          "tokensave_meta"
+        ],
+        "properties": {
+          "tokensave_meta": {
+            "type": "object",
+            "properties": {
+              "request_id": {
+                "type": "string"
+              },
+              "cache_hit": {
+                "type": "boolean"
+              },
+              "model_used": {
+                "type": "string"
+              },
+              "complexity": {
+                "type": "string",
+                "enum": [
+                  "simple",
+                  "complex"
+                ]
+              },
+              "chars_saved": {
+                "type": "number"
+              },
+              "quality_mode": {
+                "type": "string"
+              },
+              "latency_ms": {
+                "type": "number"
+              },
+              "method": {
+                "type": "string"
+              },
+              "cost": {
+                "type": "number"
+              },
+              "cost_without_optimization": {
+                "type": "number"
+              },
+              "savings_percent": {
+                "type": "number"
+              },
+              "input_tokens": {
+                "type": "number"
+              },
+              "output_tokens": {
+                "type": "number"
+              },
+              "tokens_saved": {
+                "type": "string"
+              },
+              "tags": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "original_provider": {
+                "type": "string"
+              },
+              "fallback_provider": {
+                "type": "string"
+              },
+              "is_error": {
+                "type": "boolean"
+              },
+              "note": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true,
+        "description": "Native provider JSON with branch-dependent metadata. No universal choices/content contract."
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "additionalProperties": true
+              }
+            ]
+          },
+          "tokensave_meta": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true,
+        "description": "Error envelope varies by middleware/provider. Check HTTP status before parsing."
+      },
+      "BatchRequest": {
+        "type": "object",
+        "required": [
+          "apiKey",
+          "prompts"
+        ],
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "anthropic",
+              "openai",
+              "google",
+              "groq"
+            ],
+            "default": "anthropic"
+          },
+          "apiKey": {
+            "type": "string",
+            "writeOnly": true
+          },
+          "prompts": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 50,
+            "items": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "content"
+                  ],
+                  "properties": {
+                    "content": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "BatchResponse": {
+        "type": "object",
+        "required": [
+          "batch_id",
+          "total",
+          "successful",
+          "cached",
+          "processing_time_ms",
+          "results"
+        ],
+        "properties": {
+          "batch_id": {
+            "type": "string"
+          },
+          "total": {
+            "type": "integer"
+          },
+          "successful": {
+            "type": "integer"
+          },
+          "cached": {
+            "type": "integer"
+          },
+          "processing_time_ms": {
+            "type": "number"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "prompt",
+                "status"
+              ],
+              "properties": {
+                "prompt": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "success",
+                    "error"
+                  ]
+                },
+                "response": {
+                  "type": "object",
+                  "additionalProperties": true
+                },
+                "error": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "TrimRequest": {
+        "type": "object",
+        "required": [
+          "messages"
+        ],
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Message"
+            }
+          },
+          "maxTokens": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 4000,
+            "description": "Recommended input constraint; not enforced by current route. Target is not a hard ceiling."
+          }
+        }
+      },
+      "TrimResponse": {
+        "type": "object",
+        "required": [
+          "original_messages",
+          "trimmed_messages",
+          "messages_removed",
+          "original_tokens",
+          "final_tokens",
+          "tokens_saved",
+          "trimmed"
+        ],
+        "properties": {
+          "original_messages": {
+            "type": "number"
+          },
+          "trimmed_messages": {
+            "type": "number"
+          },
+          "messages_removed": {
+            "type": "number"
+          },
+          "original_tokens": {
+            "type": "number"
+          },
+          "final_tokens": {
+            "type": "number"
+          },
+          "tokens_saved": {
+            "type": "number"
+          },
+          "trimmed": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Message"
+            }
+          }
+        }
+      },
+      "SmartRequest": {
+        "type": "object",
+        "required": [
+          "messages"
+        ],
+        "properties": {
+          "messages": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/Message"
+            }
+          },
+          "maxTokens": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 4000
+          },
+          "keepRecent": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 6
+          }
+        },
+        "description": "Positive integer limits are recommended client constraints, not runtime-enforced bounds."
+      },
+      "SmartResponse": {
+        "type": "object",
+        "required": [
+          "optimized",
+          "original_tokens",
+          "final_tokens",
+          "tokens_saved",
+          "percent_saved",
+          "messages"
+        ],
+        "properties": {
+          "optimized": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "original_messages": {
+            "type": "number"
+          },
+          "optimized_messages": {
+            "type": "number"
+          },
+          "messages_summarized": {
+            "type": "number"
+          },
+          "messages_kept": {
+            "type": "number"
+          },
+          "original_tokens": {
+            "type": "number"
+          },
+          "final_tokens": {
+            "type": "number"
+          },
+          "tokens_saved": {
+            "type": "number"
+          },
+          "percent_saved": {
+            "type": "number"
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Message"
+            }
+          }
+        },
+        "additionalProperties": true
+      },
+      "Health": {
+        "type": "object",
+        "required": [
+          "status",
+          "timestamp",
+          "version",
+          "services"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "healthy",
+              "degraded"
+            ]
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "version": {
+            "type": "string"
+          },
+          "services": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        }
+      },
+      "Discovery": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "service": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  }
+}
