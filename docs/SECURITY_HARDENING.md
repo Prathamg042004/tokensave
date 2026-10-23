@@ -27,3 +27,7 @@ This change strengthens account boundaries. It is not a penetration-test certifi
 - Review dependency audit results, cache policy/quality tradeoffs, provider request schemas, cost estimation, and SDK behavior before a public production launch.
 
 The source changes must be merged and deployed before they protect the hosted service.
+
+## Dependency review
+
+Pinned @sentry/nextjs to 10.75.2 to address GHSA-mchm-gjx6-7h55 and updated the lockfile. After this update, `npm audit --omit=dev` reported zero known runtime dependency vulnerabilities on 2026-10-23. This is scoped to the checked dependency graph, not a guarantee that the application is secure. TypeScript checking and all 55 tests passed after the update. The production build remains unverified because approval review blocked Sentry build-time transmission.
