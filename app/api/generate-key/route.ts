@@ -1,3 +1,5 @@
+import { requireUser, assertOwner, accessResponse, readJson } from "../../lib/security.mjs";
+import { randomBytes } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { Redis } from "@upstash/redis";
 
@@ -9,19 +11,17 @@ try {
   });
 } catch (e) {}
 
-function generateKey(): string {
-  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
-  let key = "ts_live_";
-  for (let i = 0; i < 32; i++) {
-    key += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return key;
-}
+function generateKey(): string { return "ts_live_" + randomBytes(32).toString("hex"); }
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const user = await requireUser(req);
+    const body = await readJson(req);
+    assertOwner(body.userId, user.id);
+    body.userId = user.id;
+    body.email = user.email;
     const { userId, email, action } = body;
+    if (action && !["get", "rotate"].includes(action)) return NextResponse.json({error:"Invalid action"},{status:400});
 
     if (!userId) {
       return NextResponse.json({ error: "userId is required" }, { status: 400 });
@@ -31,28 +31,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Storage unavailable" }, { status: 500 });
     }
 
-    if (action === "rotate") {
-      const oldKey = await redis.get("user_key:" + userId);
-      if (oldKey) {
-        await redis.del("key_owner:" + oldKey);
-      }
-      const newKey = generateKey();
-      await redis.set("user_key:" + userId, newKey);
-      await redis.set("key_owner:" + newKey, JSON.stringify({ userId, email, created: Date.now(), rotated: true }));
-      return NextResponse.json({ key: newKey, rotated: true });
-    }
+    const newKey = generateKey();
+    const metadata = JSON.stringify({ userId, email, created: Date.now() });
+    const key = await redis.eval(`
+      local old = redis.call('GET', KEYS[1])
+      if old and ARGV[1] ~= 'rotate' then return old end
+      if old then redis.call('DEL', 'key_owner:' .. old) end
+      redis.call('SET', KEYS[1], ARGV[2])
+      redis.call('SET', 'key_owner:' .. ARGV[2], ARGV[3])
+      return ARGV[2]
+    `, ["user_key:" + userId], [action || "get", newKey, metadata]);
+    return NextResponse.json({ key, rotated: action === "rotate" }, {headers:{"Cache-Control":"no-store"}});
 
-    const existing = await redis.get("user_key:" + userId);
-    if (existing) {
-      return NextResponse.json({ key: existing });
-    }
-
-    const key = generateKey();
-    await redis.set("user_key:" + userId, key);
-    await redis.set("key_owner:" + key, JSON.stringify({ userId, email, created: Date.now() }));
-
-    return NextResponse.json({ key });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return accessResponse(error);
   }
 }

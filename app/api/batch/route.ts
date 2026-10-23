@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { POST as proxyPost } from "../proxy/route";
+import { readJson, accessResponse } from "../../lib/security.mjs";
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const body = await readJson(req);
     const { prompts, provider = "anthropic", apiKey } = body;
 
     if (!prompts || !Array.isArray(prompts) || prompts.length === 0) {
@@ -22,19 +24,20 @@ export async function POST(req: NextRequest) {
 
     for (const prompt of prompts) {
       try {
-        const res = await fetch("https://tokensave.vercel.app/api/proxy", {
+        const res = await proxyPost(new NextRequest(new URL("/api/proxy", req.url), {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", "x-forwarded-for": req.headers.get("x-forwarded-for") || "unknown" },
           body: JSON.stringify({
             provider,
             apiKey,
+            tsKey: body.tsKey,
             messages: [{ role: "user", content: typeof prompt === "string" ? prompt : prompt.content }],
           }),
-        });
+        }));
         const data = await res.json();
         results.push({
           prompt: typeof prompt === "string" ? prompt : prompt.content,
-          status: "success",
+          status: res.ok ? "success" : "error",
           response: data,
         });
       } catch (e: any) {
@@ -59,7 +62,7 @@ export async function POST(req: NextRequest) {
       results,
     });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return accessResponse(error);
   }
 }
 

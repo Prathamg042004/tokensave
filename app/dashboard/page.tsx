@@ -4,6 +4,14 @@ import { supabase } from "../supabase";
 import { useRouter } from "next/navigation";
 import { ProviderLogo } from "../icons";
 
+async function accountFetch(path: string, options: RequestInit = {}) {
+  const { data } = await supabase.auth.getSession();
+  if (!data.session?.access_token) throw new Error("Sign in required.");
+  const headers = new Headers(options.headers);
+  headers.set("Authorization", "Bearer " + data.session.access_token);
+  return fetch(path, {...options, headers});
+}
+
 // Keep operational numbers stable; motion is decorative only.
 function FadeUp({ children, delay = 0, className = "" }: { children: ReactNode; delay?: number; className?: string }) {
   return <div className={"dash-enter " + className} style={{ animationDelay: Math.min(delay, .15) + "s" }}>{children}</div>;
@@ -77,7 +85,7 @@ function Skeleton({ w = "100%", h = 20 }: { w?: string | number; h?: number }) {
 // Key Manager
 function KeyManager({ userId, email }: { userId: string; email: string }) {
   const [key, setKey] = useState(""); const [copied, setCopied] = useState(false); const [show, setShow] = useState(false); const [confirmR, setConfirmR] = useState(false); const [msg, setMsg] = useState("");
-  useEffect(() => { if (userId) fetch("/api/generate-key", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId, email }) }).then(r => r.json()).then(d => { if (d.key) setKey(d.key); }).catch(() => {}); }, [userId, email]);
+  useEffect(() => { if (userId) accountFetch("/api/generate-key", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId, email }) }).then(r => r.json()).then(d => { if (d.key) setKey(d.key); }).catch(() => {}); }, [userId, email]);
   if (!key) return <div className="space-y-2"><Skeleton h={48} /><Skeleton w="60%" h={12} /></div>;
   return (
     <div>
@@ -89,7 +97,7 @@ function KeyManager({ userId, email }: { userId: string; email: string }) {
       <div className="flex justify-between mt-2">
         <span className="text-[12px] text-[#94a2b9]">Include as <code className="text-[#a9b5c8]">tsKey</code> in requests</span>
         {!confirmR ? <button onClick={() => setConfirmR(true)} className="text-[12px] text-[#94a2b9] hover:text-[#FF5F57] transition-colors">Rotate</button>
-        : <div className="flex gap-2"><button onClick={async () => { const r = await fetch("/api/generate-key", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId, email, action: "rotate" }) }).then(r => r.json()); if (r.key) { setKey(r.key); setMsg("Rotated!"); setTimeout(() => setMsg(""), 3000); } setConfirmR(false); }} className="text-[12px] text-[#FF5F57]">Confirm</button><button onClick={() => setConfirmR(false)} className="text-[12px] text-[#94a2b9]">Cancel</button></div>}
+        : <div className="flex gap-2"><button onClick={async () => { const r = await accountFetch("/api/generate-key", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId, email, action: "rotate" }) }).then(r => r.json()); if (r.key) { setKey(r.key); setMsg("Rotated!"); setTimeout(() => setMsg(""), 3000); } setConfirmR(false); }} className="text-[12px] text-[#FF5F57]">Confirm</button><button onClick={() => setConfirmR(false)} className="text-[12px] text-[#94a2b9]">Cancel</button></div>}
       </div>
       {msg && <p className="text-[#E8B94B] text-[12px] mt-1">{msg}</p>}
     </div>
@@ -145,7 +153,7 @@ export default function Dashboard() {
     if (statsBusy.current) return;
     statsBusy.current = true; setRefreshing(true);
     try {
-      const response = await fetch("/api/stats");
+      const response = await accountFetch("/api/stats");
       if (!response.ok) throw new Error("Stats unavailable");
       const result = await response.json();
       if (!result.totals || !Array.isArray(result.days)) throw new Error("Invalid statistics");
@@ -458,4 +466,3 @@ export default function Dashboard() {
     </div>
   );
 }
-
