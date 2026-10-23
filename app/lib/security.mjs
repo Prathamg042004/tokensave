@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 
 export class AccessError extends Error {
   constructor(status, message) { super(message); this.status = status; }
@@ -39,9 +39,10 @@ export async function keyOwner(redis, key) {
   return owner.userId;
 }
 
-// Include credentials, provider, model and quality: no cross-customer cache reuse.
+// Key the cache namespace with the high-entropy provider API credential.
+// This is a cache authenticator, not a password verifier; never persist the credential.
 export function privateCacheKey(messages, provider, model, quality, apiKey) {
-  return 'cache:v2:' + createHash('sha256').update(JSON.stringify({ messages, provider, model, quality, credential: apiKey })).digest('hex');
+  return 'cache:v3:' + createHmac('sha256', apiKey).update(JSON.stringify({ messages, provider, model, quality })).digest('hex');
 }
 
 export function accessResponse(error) {
