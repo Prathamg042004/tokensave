@@ -14,7 +14,7 @@ An experimental LLM optimization service for Claude, GPT, Gemini and Groq, with 
 [Live app](https://tokensave.vercel.app) ·
 [Playground](https://tokensave.vercel.app/playground) ·
 [Docs](https://tokensave.vercel.app/docs) ·
-[API reference](https://tokensave.vercel.app/api-reference) ·
+[API reference](https://tokensave.vercel.app/docs/api-reference) ·
 [Security](https://tokensave.vercel.app/security) ·
 [Changelog](./CHANGELOG.md)
 
