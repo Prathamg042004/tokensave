@@ -1,3 +1,4 @@
+import { requireUser, assertOwner, accessResponse, readJson } from "../../lib/security.mjs";
 import { NextRequest, NextResponse } from "next/server";
 import { Redis } from "@upstash/redis";
 
@@ -11,43 +12,25 @@ try {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { userId, action, webhookUrl, events } = body;
+    const user = await requireUser(req);
+    const body = await readJson(req);
+    assertOwner(body.userId, user.id);
+    body.userId = user.id;
+    body.email = user.email;
+    const { userId, action } = body;
 
     if (!userId) return NextResponse.json({ error: "userId required" }, { status: 400 });
 
     if (action === "create") {
-      if (!webhookUrl) return NextResponse.json({ error: "webhookUrl required" }, { status: 400 });
-      const webhook = {
-        id: "wh_" + Date.now().toString(36),
-        url: webhookUrl,
-        events: events || ["request_completed", "error", "budget_alert"],
-        created: Date.now(),
-        active: true,
-      };
-      if (redis) {
-        await redis.set("webhook:" + userId, JSON.stringify(webhook));
-      }
-      return NextResponse.json({ webhook });
+      return NextResponse.json({error:"Webhook delivery is disabled pending safe egress validation."},{status:501});
     }
-
     if (action === "delete") {
       if (redis) await redis.del("webhook:" + userId);
       return NextResponse.json({ deleted: true });
     }
 
     if (action === "test") {
-      if (!webhookUrl) return NextResponse.json({ error: "webhookUrl required" }, { status: 400 });
-      try {
-        const testRes = await fetch(webhookUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ event: "test", message: "TokenSave webhook test successful", timestamp: Date.now() }),
-        });
-        return NextResponse.json({ success: testRes.ok, status: testRes.status });
-      } catch (e: any) {
-        return NextResponse.json({ success: false, error: e.message });
-      }
+      return NextResponse.json({ error: "Webhook delivery is disabled pending safe egress validation." }, {status:501});
     }
 
     if (redis) {
@@ -60,14 +43,15 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ webhook: null });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return accessResponse(error);
   }
 }
 
 export async function GET() {
   return NextResponse.json({
     service: "TokenSave Webhooks",
-    description: "Receive notifications for API events",
+    description: "Webhook delivery is disabled pending safe egress validation.",
+    delivery_enabled: false,
     supported_events: ["request_completed", "error", "budget_alert", "cache_hit", "fallback_triggered"],
     usage: { method: "POST", body: { userId: "your-user-id", action: "create | delete | test", webhookUrl: "https://your-server.com/webhook", events: ["request_completed", "error"] } },
   });

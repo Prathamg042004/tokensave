@@ -1,3 +1,4 @@
+import { keyOwner, accessResponse } from "../../lib/security.mjs";
 import { NextRequest, NextResponse } from "next/server";
 import { Redis } from "@upstash/redis";
 
@@ -9,10 +10,11 @@ export async function GET(req: any) {
   try {
     const url = process.env.UPSTASH_REDIS_REST_URL;
     const token = process.env.UPSTASH_REDIS_REST_TOKEN;
-    if (!url || !token) return NextResponse.json({ entries: [] });
+    if (!url || !token) return NextResponse.json({error:"Storage unavailable"},{status:503});
     const redis = new Redis({ url, token });
-    const logs = await redis.lrange("audit_log", 0, 99) || [];
+    const userId = await keyOwner(redis, auth.slice(7));
+    const logs = await redis.lrange("audit_log:" + userId, 0, 99) || [];
     const parsed = logs.map((l) => { try { return typeof l === "string" ? JSON.parse(l) : l; } catch { return l; } });
     return NextResponse.json({ service: "TokenSave Audit Log", total: parsed.length, entries: parsed });
-  } catch (e:any) { return NextResponse.json({ error:e.message }, { status: 500 }); }
+  } catch (e:any) { return accessResponse(e); }
 }

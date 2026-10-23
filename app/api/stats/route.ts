@@ -1,4 +1,5 @@
-﻿import { NextResponse } from "next/server";
+import { requireUser, accessResponse } from "../../lib/security.mjs";
+import { NextResponse } from "next/server";
 import { Redis } from "@upstash/redis";
 
 let redis: any = null;
@@ -9,8 +10,9 @@ try {
   });
 } catch (e) {}
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    const user = await requireUser(req);
     if (!redis) return NextResponse.json({ days: [], totals: { total_requests: 0, tokens_saved: 0, cache_hits: 0 }, recent_logs: [] });
 
     const days = [];
@@ -18,7 +20,7 @@ export async function GET() {
       const d = new Date();
       d.setDate(d.getDate() - i);
       const key = d.toISOString().split("T")[0];
-      const stats = await redis.hgetall("stats:" + key) || {};
+      const stats = await redis.hgetall("user_stats:" + user.id + ":" + key) || {};
       days.push({
         date: key,
         label: d.toLocaleDateString("en-US", { weekday: "short" }),
@@ -44,14 +46,14 @@ export async function GET() {
       total_saved: acc.total_saved + d.total_saved,
     }), { total_requests: 0, tokens_saved: 0, cache_hits: 0, total_input_tokens: 0, total_output_tokens: 0, errors: 0, total_cost: 0, total_saved: 0 });
 
-    const logs = await redis.lrange("request_logs", 0, 49) || [];
+    const logs = await redis.lrange("request_logs:" + user.id, 0, 49) || [];
     const parsedLogs = logs.map((log: any) => {
       try { return typeof log === "string" ? JSON.parse(log) : log; } catch { return log; }
     });
 
     let latencies: number[] = [];
     try {
-      const latencyLogs = await redis.lrange("latency_log", 0, 49) || [];
+      const latencyLogs = await redis.lrange("latency_log:" + user.id, 0, 49) || [];
       latencies = latencyLogs.map((l: any) => {
         try { const parsed = typeof l === "string" ? JSON.parse(l) : l; return parsed.latency; } catch { return 0; }
       }).filter((l: number) => l > 0);
@@ -73,8 +75,6 @@ export async function GET() {
       },
     });
   } catch (error: any) {
-    return NextResponse.json({
-      days: [], totals: { total_requests: 0, tokens_saved: 0, cache_hits: 0 }, recent_logs: [], performance: {},
-    });
+    return accessResponse(error);
   }
 }

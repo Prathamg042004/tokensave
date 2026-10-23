@@ -7,19 +7,7 @@ const redis = new Redis({
 });
 
 export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
-    const { requests, cacheHits, tokensSaved, provider } = body;
-    const today = new Date().toISOString().split("T")[0];
-
-    await redis.hincrby("stats:" + today, "total_requests", requests || 0);
-    await redis.hincrby("stats:" + today, "cache_hits", cacheHits || 0);
-    await redis.hincrby("stats:" + today, "tokens_saved", tokensSaved || 0);
-
-    return NextResponse.json({ received: true });
-  } catch (error) {
-    return NextResponse.json({ received: false }, { status: 500 });
-  }
+  return NextResponse.json({error:"Client-supplied usage counters are not accepted."},{status:410});
 }
 
 export async function GET() {

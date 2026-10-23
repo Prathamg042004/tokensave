@@ -1,4 +1,5 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { keyOwner, privateCacheKey, accessResponse, readJson } from "../../lib/security.mjs";
+import { NextRequest, NextResponse } from "next/server";
 import { Redis } from "@upstash/redis";
 
 // Redis connection
@@ -83,29 +84,20 @@ async function logRequest(data: any): Promise<void> {
 
     if (data.userId) {
       const userKey = "user_stats:" + data.userId + ":" + today;
-      await redis.hincrby(userKey, "requests", 1);
-      await redis.hincrby(userKey, "tokens_saved", data.tokens_saved || 0);
+      const values = { total_requests:1, tokens_saved:data.tokens_saved || 0, cache_hits:data.cache_hit ? 1 : 0,
+        total_input_tokens:data.input_tokens || 0,total_output_tokens:data.output_tokens || 0,
+        errors:data.is_error ? 1 : 0,total_cost_micro:costMicro,total_saved_micro:savedMicro };
+      for (const [field,value] of Object.entries(values)) await redis.hincrby(userKey,field,value);
+      await redis.lpush("request_logs:" + data.userId, JSON.stringify(entry));
+      await redis.ltrim("request_logs:" + data.userId,0,99);
+      await redis.lpush("audit_log:" + data.userId,JSON.stringify({event:data.is_error ? "api_error" : "api_request",timestamp:Date.now(),provider:data.provider,model:data.model}));
+      await redis.ltrim("audit_log:" + data.userId,0,99);
+      if (data.latency) {
+        await redis.lpush("latency_log:" + data.userId,JSON.stringify({latency:data.latency,timestamp:Date.now()}));
+        await redis.ltrim("latency_log:" + data.userId,0,99);
+      }
     }
 
-    // Audit log
-    await redis.lpush("audit_log", JSON.stringify({
-      event: data.is_error ? "api_error" : "api_request",
-      timestamp: Date.now(),
-      provider: data.provider,
-      model: data.model,
-      cache_hit: data.cache_hit,
-      userId: data.userId,
-    }));
-    await redis.ltrim("audit_log", 0, 999);
-
-    // Webhook
-    if (data.webhookUrl) {
-      fetch(data.webhookUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ event: "request_completed", data: entry }),
-      }).catch(() => {});
-    }
   } catch {}
 }
 
@@ -190,16 +182,6 @@ function compressPrompt(text: string): { compressed: string; savedChars: number 
   return { compressed: c, savedChars: text.length - c.length };
 }
 
-function getCacheKey(messages: any[]): string {
-  const raw = messages.map((m: any) => m.role + ":" + m.content).join("|");
-  let hash = 0;
-  for (let i = 0; i < raw.length; i++) {
-    hash = ((hash << 5) - hash) + raw.charCodeAt(i);
-    hash = hash & hash;
-  }
-  return "cache:" + Math.abs(hash).toString(36);
-}
-
 // Input validation
 function validateInput(body: any): string | null {
   if (!body.messages || !Array.isArray(body.messages) || body.messages.length === 0) {
@@ -269,7 +251,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Request too large. Maximum 500KB." }, { status: 413 });
     }
 
-    const body = await req.json();
+    const body = await readJson(req);
 
     // Validate input
     const validationError = validateInput(body);
@@ -285,12 +267,14 @@ export async function POST(req: NextRequest) {
       quality = "auto",
       fallbackKeys = {},
       tags = {},
-      userId,
       webhookUrl,
     } = body;
 
+    const userId = body.tsKey ? await keyOwner(redis, body.tsKey) : undefined;
+    if (webhookUrl) return NextResponse.json({error:"Outbound webhook callbacks are disabled."},{status:400});
+
     // Rate limiting
-    const rateLimitId = body.tsKey || clientIp;
+    const rateLimitId = clientIp;
     const rlCount = await rIncr("rl:" + rateLimitId);
     if (rlCount === 1) await rExpire("rl:" + rateLimitId, RATE_WINDOW);
 
@@ -319,7 +303,7 @@ export async function POST(req: NextRequest) {
     }));
 
     // Check cache
-    const cacheKey = getCacheKey(cleanMessages);
+    const cacheKey = privateCacheKey(cleanMessages, provider, requestedModel || "auto", quality, apiKey);
     const cached = await rGet(cacheKey);
 
     if (cached) {
@@ -363,7 +347,7 @@ export async function POST(req: NextRequest) {
 
     // Build and send request
     const { url: apiUrl, headers, body: apiBody } = buildProviderRequest(provider, model, apiKey, optimizedMessages);
-    const aiResponse = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify(apiBody) });
+    const aiResponse = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify(apiBody), redirect:"error", signal:AbortSignal.timeout(30000) });
     const aiData = await aiResponse.json();
     const latency = Date.now() - startTime;
 
@@ -383,7 +367,7 @@ export async function POST(req: NextRequest) {
           try {
             const fbModel = pickModel(complexity, fbProvider);
             const { url: fbUrl, headers: fbHeaders, body: fbBody } = buildProviderRequest(fbProvider, fbModel, fbKey, optimizedMessages);
-            const fbResponse = await fetch(fbUrl, { method: "POST", headers: fbHeaders, body: JSON.stringify(fbBody) });
+            const fbResponse = await fetch(fbUrl, { method: "POST", headers: fbHeaders, body: JSON.stringify(fbBody), redirect:"error", signal:AbortSignal.timeout(30000) });
 
             if (fbResponse.status < 400) {
               const fbData = await fbResponse.json();
@@ -392,7 +376,7 @@ export async function POST(req: NextRequest) {
               const cost = calculateCost(fbModel, inputTokens, outputTokens);
               const costWithout = calculateCost(getExpensiveModel(fbProvider), inputTokens, outputTokens);
 
-              await rSet(cacheKey, fbData, CACHE_TTL);
+              // Fallback responses are not cached under the primary provider identity.
               await logRequest({
                 cache_hit: false, tokens_saved: savedChars, provider: fbProvider, model: fbModel,
                 complexity, latency: fbLatency, userId, tags: cleanTags, is_error: false,
@@ -466,7 +450,7 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     const latency = Date.now() - startTime;
     await logRequest({ is_error: true, error_message: error.message, latency });
-    return NextResponse.json({ error: "TokenSave proxy error: " + error.message }, { status: 500 });
+    return accessResponse(error);
   }
 }
 
@@ -489,14 +473,14 @@ export async function GET() {
     },
     rate_limit: RATE_LIMIT + " requests/minute",
     features: [
-      "Semantic caching with 30-minute TTL",
+      "Credential-isolated exact-match caching with 30-minute TTL",
       "Smart model routing by complexity",
       "Safe prompt compression",
       "Multi-provider automatic fallback",
       "Real per-token cost tracking",
       "Latency monitoring (avg + P95)",
       "Custom request tags",
-      "Webhook notifications",
+      "Account-scoped audit logs",
       "Per-user analytics",
       "Quality modes (auto/max_savings/max_quality)",
       "Rate limiting with headers",
