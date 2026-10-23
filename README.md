@@ -4,7 +4,7 @@
 
 **Cut your LLM API bill with caching, cost-aware model routing and context compression.**
 
-A drop-in middleware for Claude, GPT, Gemini and Groq. Measured in dollars, not bytes.
+An experimental LLM optimization service for Claude, GPT, Gemini and Groq, with a custom JSON API and a web dashboard.
 
 [![CI](https://github.com/Prathamg042004/tokensave/actions/workflows/ci.yml/badge.svg)](https://github.com/Prathamg042004/tokensave/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/Prathamg042004/tokensave/actions/workflows/codeql.yml/badge.svg)](https://github.com/Prathamg042004/tokensave/actions/workflows/codeql.yml)
@@ -14,6 +14,7 @@ A drop-in middleware for Claude, GPT, Gemini and Groq. Measured in dollars, not 
 [Live app](https://tokensave.vercel.app) ·
 [Playground](https://tokensave.vercel.app/playground) ·
 [Docs](https://tokensave.vercel.app/docs) ·
+[API reference](https://tokensave.vercel.app/api-reference) ·
 [Security](https://tokensave.vercel.app/security) ·
 [Changelog](./CHANGELOG.md)
 
