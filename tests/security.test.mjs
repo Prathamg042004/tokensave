@@ -58,3 +58,14 @@ test('actual bytes are bounded even without a content-length header', async () =
   await assert.rejects(readJson(request('{bad')),{status:400});
   assert.deepEqual(await readJson(request('{"valid":true}')),{valid:true});
 });
+
+test('rate limit identity survives API key rotation for verified accounts',async()=>{
+  const {rateLimitScope,consumeRateLimit}=await import('../app/lib/security.mjs');
+  assert.equal(rateLimitScope('owner','openai','old'),rateLimitScope('owner','groq','new'));
+  assert.notEqual(rateLimitScope(undefined,'openai','one'),rateLimitScope(undefined,'openai','two'));
+  assert.notEqual(rateLimitScope(undefined,'openai','one'),rateLimitScope(undefined,'groq','one'));
+  assert.deepEqual(await consumeRateLimit({eval:async()=>[60,0]},'test'),{count:60,allowed:true,retryAfter:1});
+  for(const value of [null,[],['1',60],[1,-1],[1,61],[1,60,0]]) {
+    await assert.rejects(consumeRateLimit({eval:async()=>value},'test'),{status:503});
+  }
+});

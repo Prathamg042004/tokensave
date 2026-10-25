@@ -84,3 +84,38 @@ test('webhook test cannot make a request to a caller-selected server',async()=>{
     assert.deepEqual(destinations,['https://auth.example.test/auth/v1/user']);
   } finally {globalThis.fetch=oldFetch;for(const [i,key] of ['NEXT_PUBLIC_SUPABASE_URL','NEXT_PUBLIC_SUPABASE_ANON_KEY'].entries()){if(previous[i]===undefined)delete process.env[key];else process.env[key]=previous[i];}}
 });
+
+test('proxy refuses provider calls when durable limiting fails',async()=>{
+  const saved=[process.env.UPSTASH_REDIS_REST_URL,process.env.UPSTASH_REDIS_REST_TOKEN];
+  process.env.UPSTASH_REDIS_REST_URL='https://redis.example.test';process.env.UPSTASH_REDIS_REST_TOKEN='test';
+  const oldFetch=globalThis.fetch;let providerCalls=0;
+  globalThis.fetch=async()=>{providerCalls++;throw Error('must not contact provider');};
+  try {
+    for(const redis of [null,{eval:async()=>{throw Error('offline');}},{eval:async()=>[0,60]}]) {
+      const {POST}=loadRoute('proxy',redis);
+      const response=await POST(request({provider:'openai',apiKey:'test-provider-key',messages:[{role:'user',content:'hello'}]}));
+      assert.equal(response.status,503);
+      assert.equal(response.headers.get('cache-control'),'no-store');
+    }
+    assert.equal(providerCalls,0);
+  } finally {globalThis.fetch=oldFetch;for(const [i,key] of ['UPSTASH_REDIS_REST_URL','UPSTASH_REDIS_REST_TOKEN'].entries()){if(saved[i]===undefined)delete process.env[key];else process.env[key]=saved[i];}}
+});
+
+test('changing forwarded IP headers does not reset a provider credential budget',async()=>{
+  const saved=[process.env.UPSTASH_REDIS_REST_URL,process.env.UPSTASH_REDIS_REST_TOKEN];
+  process.env.UPSTASH_REDIS_REST_URL='https://redis.example.test';process.env.UPSTASH_REDIS_REST_TOKEN='test';
+  try {
+    const redis=storage();const budgets=new Map();
+    redis.eval=async(_script,keys)=>{const count=(budgets.get(keys[0])||0)+1;budgets.set(keys[0],count);return [count,23];};
+    redis.get=async()=>({choices:[{message:{content:'cached fixture'}}]});
+    const {POST}=loadRoute('proxy',redis);
+    for(let i=1;i<=61;i++) {
+      const req=new Request('https://app.example.test/api/proxy',{method:'POST',headers:{'x-forwarded-for':'192.0.2.'+i},body:JSON.stringify({provider:'openai',apiKey:'same-test-credential',messages:[{role:'user',content:'hello'}]})});
+      const response=await POST(req);
+      assert.equal(response.status,i<=60?200:429);
+      if(i===61)assert.equal(response.headers.get('retry-after'),'23');
+    }
+    assert.equal(budgets.size,1);
+    assert.ok(![...budgets.keys()][0].includes('same-test-credential'));
+  } finally {for(const [i,key] of ['UPSTASH_REDIS_REST_URL','UPSTASH_REDIS_REST_TOKEN'].entries()){if(saved[i]===undefined)delete process.env[key];else process.env[key]=saved[i];}}
+});

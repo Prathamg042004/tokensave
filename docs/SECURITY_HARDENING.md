@@ -31,3 +31,10 @@ The source changes must be merged and deployed before they protect the hosted se
 ## Dependency review
 
 Pinned @sentry/nextjs to 10.75.2 to address GHSA-mchm-gjx6-7h55 and updated the lockfile. After this update, `npm audit --omit=dev` reported zero known runtime dependency vulnerabilities on 2026-10-23. This is scoped to the checked dependency graph, not a guarantee that the application is secure. TypeScript checking and all 55 tests passed after the update. The production build remains unverified because approval review blocked Sentry build-time transmission.
+
+
+## Durable request limits
+
+Proxy calls now use an atomic Redis counter and expiry. Missing, failed, or malformed limiter responses return 503 before provider calls; exhausted budgets return 429 with the remaining window in Retry-After. Verified TokenSave accounts share a budget across key rotations. Anonymous bring-your-own-key requests share a provider-credential HMAC namespace, regardless of forwarded IP headers. This is not a per-person quota: anonymous users with multiple credentials can have multiple budgets. Batch items call the same proxy limiter.
+
+Validation includes Redis failure, malformed counters, 61 requests with changing forwarded headers, credential separation, and account key rotation. These route regressions use a fake Redis; the Lua script still requires a real Redis integration check before deployment.

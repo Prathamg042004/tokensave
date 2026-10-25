@@ -70,3 +70,33 @@ export async function readJson(request, maxBytes = 500000) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw new AccessError(400, 'JSON object required.');
   return body;
 }
+
+// One atomic operation prevents counters without expiry and concurrent overshoot.
+export const RATE_LIMIT_SCRIPT = `
+local count = redis.call('INCR', KEYS[1])
+local ttl = redis.call('TTL', KEYS[1])
+if ttl < 0 then
+  redis.call('EXPIRE', KEYS[1], ARGV[1])
+  ttl = tonumber(ARGV[1])
+end
+return {count, ttl}
+`;
+
+export function rateLimitScope(userId, provider, apiKey) {
+  if (userId) return 'account:' + userId;
+  // Anonymous BYOK calls share a budget for the same provider credential.
+  return 'credential:' + createHmac('sha256', apiKey).update('tokensave-rate-v1:' + provider).digest('hex');
+}
+
+export async function consumeRateLimit(redis, scope, limit = 60, windowSeconds = 60) {
+  if (!redis) throw new AccessError(503, 'Request limiting is unavailable.');
+  let result;
+  try { result = await redis.eval(RATE_LIMIT_SCRIPT, ['rl:v2:' + scope], [windowSeconds]); }
+  catch { throw new AccessError(503, 'Request limiting is unavailable.'); }
+  if (!Array.isArray(result) || result.length !== 2 ||
+      !Number.isSafeInteger(result[0]) || result[0] < 1 ||
+      !Number.isSafeInteger(result[1]) || result[1] < 0 || result[1] > windowSeconds) {
+    throw new AccessError(503, 'Request limiting is unavailable.');
+  }
+  return { count: result[0], allowed: result[0] <= limit, retryAfter: Math.max(1, result[1]) };
+}

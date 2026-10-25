@@ -5,3 +5,7 @@ export function keyOwner(redis: {get(key: string): Promise<unknown>} | null, key
 export function privateCacheKey(messages: unknown[], provider: string, model: string, quality: string, apiKey: string): string;
 export function accessResponse(error: unknown): Response;
 export function readJson(request: Request, maxBytes?: number): Promise<Record<string, any>>;
+
+export const RATE_LIMIT_SCRIPT: string;
+export function rateLimitScope(userId: string | undefined, provider: string, apiKey: string): string;
+export function consumeRateLimit(redis: any, scope: string, limit?: number, windowSeconds?: number): Promise<{count: number; allowed: boolean; retryAfter: number}>;

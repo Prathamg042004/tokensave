@@ -1,4 +1,4 @@
-import { keyOwner, privateCacheKey, accessResponse, readJson } from "../../lib/security.mjs";
+import { keyOwner, privateCacheKey, accessResponse, readJson, consumeRateLimit, rateLimitScope } from "../../lib/security.mjs";
 import { NextRequest, NextResponse } from "next/server";
 import { Redis } from "@upstash/redis";
 
@@ -44,16 +44,6 @@ async function rGet(key: string): Promise<any> {
 async function rSet(key: string, value: any, ttl: number): Promise<void> {
   if (!redis) return;
   try { await redis.setex(key, ttl, JSON.stringify(value)); } catch {}
-}
-
-async function rIncr(key: string): Promise<number> {
-  if (!redis) return 0;
-  try { return await redis.incr(key); } catch { return 0; }
-}
-
-async function rExpire(key: string, seconds: number): Promise<void> {
-  if (!redis) return;
-  try { await redis.expire(key, seconds); } catch {}
 }
 
 async function logRequest(data: any): Promise<void> {
@@ -242,7 +232,6 @@ function buildProviderRequest(provider: string, model: string, apiKey: string, m
 // POST handler
 export async function POST(req: NextRequest) {
   const startTime = Date.now();
-  const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
 
   try {
     // Request size check
@@ -273,16 +262,14 @@ export async function POST(req: NextRequest) {
     const userId = body.tsKey ? await keyOwner(redis, body.tsKey) : undefined;
     if (webhookUrl) return NextResponse.json({error:"Outbound webhook callbacks are disabled."},{status:400});
 
-    // Rate limiting
-    const rateLimitId = clientIp;
-    const rlCount = await rIncr("rl:" + rateLimitId);
-    if (rlCount === 1) await rExpire("rl:" + rateLimitId, RATE_WINDOW);
-
-    if (rlCount > RATE_LIMIT) {
+    // Durable account/credential limits cannot be bypassed with forwarded headers.
+    const budget = await consumeRateLimit(redis, rateLimitScope(userId, provider, apiKey), RATE_LIMIT, RATE_WINDOW);
+    const rlCount = budget.count;
+    if (!budget.allowed) {
       await logRequest({ is_error: true, provider, latency: Date.now() - startTime, userId, error_message: "Rate limit exceeded" });
       return NextResponse.json(
         { error: "Rate limit exceeded. Maximum " + RATE_LIMIT + " requests per minute." },
-        { status: 429, headers: { "X-RateLimit-Remaining": "0", "X-RateLimit-Limit": String(RATE_LIMIT), "Retry-After": String(RATE_WINDOW) } }
+        { status: 429, headers: { "X-RateLimit-Remaining": "0", "X-RateLimit-Limit": String(RATE_LIMIT), "Retry-After": String(budget.retryAfter) } }
       );
     }
 
