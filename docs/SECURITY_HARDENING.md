@@ -19,22 +19,26 @@ This change strengthens account boundaries. It is not a penetration-test certifi
 
 ## Remaining production work
 
-- Durable rate limiting must fail closed during Redis outages, with quotas appropriate to authenticated tenants and hosted deployment headers.
+- Review abuse budgets and cost quotas for launch. Account and BYOK credential limits are enforced; anonymous requests are not a per-person quota.
 - Review Supabase RLS policies, OAuth redirect allowlists, session settings, and actual deployment environment. These cannot be inferred from repository source.
-- Add integration coverage against a disposable Redis for Lua key rotation, concurrent team edits, and real auth sessions.
+- Add integration coverage for concurrent team edits and real authenticated user sessions. Atomic key rotation and request limits now run against disposable Redis in required CI.
 - Design webhook delivery with controlled egress, destination verification, redirect restrictions, signed payloads, retries, and durable jobs before re-enabling it.
 - Add retention/expiry to operational logs and remove obsolete global Redis data through an approved maintenance operation.
 - Review dependency audit results, cache policy/quality tradeoffs, provider request schemas, cost estimation, and SDK behavior before a public production launch.
 
-The source changes must be merged and deployed before they protect the hosted service.
+The account-boundary and request-limit changes are merged and Vercel reported deployment complete. Live requests without authentication return 401 for stats, key provisioning, teams, webhooks and audit; analytics ingestion returns 410. This verifies negative boundaries, not every authenticated user flow.
 
 ## Dependency review
 
-Pinned @sentry/nextjs to 10.75.2 to address GHSA-mchm-gjx6-7h55 and updated the lockfile. After this update, `npm audit --omit=dev` reported zero known runtime dependency vulnerabilities on 2026-10-23. This is scoped to the checked dependency graph, not a guarantee that the application is secure. TypeScript checking and all 55 tests passed after the update. The production build remains unverified because approval review blocked Sentry build-time transmission.
-
+Pinned @sentry/nextjs to 10.75.2 and patched fast-uri to 3.1.9 in the lockfile. The production dependency audit reported zero known vulnerabilities on 2026-10-25. All 58 unit/route tests, TypeScript checks, secret scanning and GitHub's production build passed. This is scoped to the checked graph and tests, not a security certification.
 
 ## Durable request limits
 
 Proxy calls now use an atomic Redis counter and expiry. Missing, failed, or malformed limiter responses return 503 before provider calls; exhausted budgets return 429 with the remaining window in Retry-After. Verified TokenSave accounts share a budget across key rotations. Anonymous bring-your-own-key requests share a provider-credential HMAC namespace, regardless of forwarded IP headers. This is not a per-person quota: anonymous users with multiple credentials can have multiple budgets. Batch items call the same proxy limiter.
 
-Validation includes Redis failure, malformed counters, 61 requests with changing forwarded headers, credential separation, and account key rotation. These route regressions use a fake Redis; the Lua script still requires a real Redis integration check before deployment.
+Validation includes Redis failure, malformed counters, 61 requests with changing forwarded headers, credential separation, and account key rotation. Route regressions use a fake Redis. Two additional tests now pass against an isolated real Redis service in GitHub CI: 70 simultaneous calls admit exactly 60, missing expiry is repaired, concurrent key provisioning produces one key, and rotation invalidates the old key. CI OK requires this integration job.
+
+
+## Connected database review
+
+The connected TokenSave Supabase project uses Auth and had no application tables in public or sellerbot schemas at review. Supabase's security advisor reported only disabled leaked-password protection. This feature requires an eligible paid plan; no plan upgrade was purchased. Redis data authorization remains an application responsibility.
