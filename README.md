@@ -11,14 +11,20 @@ An experimental LLM optimization service for Claude, GPT, Gemini and Groq, with 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![Stars](https://img.shields.io/github/stars/Prathamg042004/tokensave?style=flat)](https://github.com/Prathamg042004/tokensave/stargazers)
 
-[Live app](https://tokensave.vercel.app) ·
-[Playground](https://tokensave.vercel.app/playground) ·
-[Docs](https://tokensave.vercel.app/docs) ·
-[API reference](https://tokensave.vercel.app/docs/api-reference) ·
-[Security](https://tokensave.vercel.app/security) ·
+[Live app](https://tokensave.in) ·
+[Playground](https://tokensave.in/playground) ·
+[Docs](https://tokensave.in/docs) ·
+[API reference](https://tokensave.in/docs/api-reference) ·
+[Security](https://tokensave.in/security) ·
 [Changelog](./CHANGELOG.md)
 
 </div>
+
+## Preview
+
+![TokenSave public landing page — caching, model routing and compression](assets/preview.jpg)
+
+[Architecture and trust boundaries](docs/ARCHITECTURE.md) · [Security verification](docs/SECURITY_HARDENING.md) · [Automated checks](https://github.com/Prathamg042004/tokensave/actions)
 
 ---
 
@@ -46,7 +52,7 @@ TokenSave currently exposes its own JSON API. Send your prompt, your provider,
 and your provider key:
 
 ```js
-const res = await fetch("https://tokensave.vercel.app/api/proxy", {
+const res = await fetch("https://tokensave.in/api/proxy", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
@@ -62,7 +68,7 @@ console.log(data.tokensave_meta);
 // { cache_hit: false, model_used: "claude-haiku-4-5", complexity: "simple", ... }
 ```
 
-Python and cURL examples are in the [docs](https://tokensave.vercel.app/docs).
+Python and cURL examples are in the [docs](https://tokensave.in/docs).
 
 > **Heads up:** this is not yet a true drop-in replacement. The official
 > `openai` and `anthropic` SDKs, LangChain and the Vercel AI SDK will not work
