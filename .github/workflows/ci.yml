@@ -136,7 +136,7 @@ jobs:
   ci-ok:
     name: CI OK
     # Single aggregate check to require in branch protection.
-    needs: [typecheck, test, build, secret-scan]
+    needs: [typecheck, test, build, secret-scan, redis-integration]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -153,3 +153,27 @@ jobs:
               ;;
           esac
           echo "all required jobs succeeded"
+
+  redis-integration:
+    name: Redis security integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      redis:
+        image: redis:7.4-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: "22"
+      - name: Verify atomic limits and API-key rotation against isolated Redis
+        env:
+          REDIS_TEST_CONTAINER: ${{ job.services.redis.id }}
+        run: node --test tests/redis-integration.test.mjs
