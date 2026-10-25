@@ -177,3 +177,25 @@ jobs:
         env:
           REDIS_TEST_CONTAINER: ${{ job.services.redis.id }}
         run: node --test tests/redis-integration.test.mjs
+
+  # Keep the original ci.yml:codeql analysis identity populated so historical
+  # alerts and pull-request comparisons can be evaluated against current code.
+  codeql:
+    name: CodeQL baseline
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+      - uses: github/codeql-action/analyze@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81
+        with:
+          category: "/language:javascript-typescript"
