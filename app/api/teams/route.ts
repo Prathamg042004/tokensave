@@ -1,3 +1,4 @@
+import { requireUser, assertOwner, accessResponse, readJson } from "../../lib/security.mjs";
 import { NextRequest, NextResponse } from "next/server";
 import { Redis } from "@upstash/redis";
 
@@ -11,9 +12,15 @@ try {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const user = await requireUser(req);
+    const body = await readJson(req);
+    assertOwner(body.userId, user.id);
+    body.userId = user.id;
+    body.email = user.email;
     const { action, userId, teamName, memberEmail, role = "member" } = body;
 
+    if (!["member", "admin", "viewer"].includes(role)) return NextResponse.json({error:"Invalid role"},{status:400});
+    if (!redis) return NextResponse.json({error:"Storage unavailable"},{status:503});
     if (!userId) return NextResponse.json({ error: "userId required" }, { status: 400 });
 
     if (action === "create") {
@@ -69,7 +76,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return accessResponse(error);
   }
 }
 
