@@ -19,7 +19,7 @@ export const proxyFields = [
   [
     "tsKey",
     "string · optional",
-    "Used as the rate-limit bucket identifier; otherwise the client IP is used. It is not validated as an authentication credential by this route and does not activate a paid plan.",
+    "Validated TokenSave key associating requests with an account and account rate limit. Without it, the budget is scoped to the provider credential. Does not activate a paid plan.",
   ],
   [
     "model",
@@ -49,7 +49,7 @@ export const proxyFields = [
   [
     "webhookUrl",
     "string · optional",
-    "Best-effort POST of request_completed and request metadata. No signature, retry or guaranteed delivery. Use only an endpoint you control; omit during initial evaluation.",
+    "Outbound webhook callbacks are disabled; supplying this field returns 400.",
   ],
 ] as const;
 export const routingModels = [
@@ -154,8 +154,13 @@ export const endpoints: Endpoint[] = [
           latency_ms: 420,
           method: "routed_to_cheap",
           cost: 0.000003,
-          cost_without_optimization: 0.00005,
-          savings_percent: 94,
+          cost_source: "published_rate_estimate",
+          usage_source: "provider",
+          currency: "USD",
+          pricing_version: "2026-10-30",
+          savings_basis: "unmeasured_baseline",
+          cost_without_optimization: null,
+          savings_percent: null,
           input_tokens: 8,
           output_tokens: 3,
           tags: {},
@@ -165,7 +170,7 @@ export const endpoints: Endpoint[] = [
       2,
     ),
     caveat:
-      "Illustrative values only. Cost and token metadata are estimates; the expensive-model comparison is not a measured direct-provider baseline. Cache-hit metadata has a different shape and may omit model_used, complexity and token counts.",
+      "Token usage comes from provider usage fields. Dollar costs are versioned standard-rate estimates, not invoices. Missing usage, unverified model prices or unsupported billing modes return null. Cache hits cost zero provider tokens and estimate avoided cost from the original record. Routing savings and unmeasured baselines return null. See docs/ACCOUNTING.md.",
   },
   {
     id: "batch",
@@ -423,7 +428,12 @@ proxyEndpoint.responses = [
       tokensave_meta: {
         request_id: "req_cache_example",
         cache_hit: true,
-        tokens_saved: "100%",
+        tokens_saved: 11,
+        cost_saved: 0.000003,
+        savings_percent: 100,
+        savings_basis: "avoided_repeat_at_original_rate",
+        input_tokens: 0,
+        output_tokens: 0,
         method: "cache",
         quality_mode: "auto",
         latency_ms: 12,
@@ -448,9 +458,11 @@ proxyEndpoint.responses = [
         latency_ms: 900,
         original_provider: "openai",
         fallback_provider: "groq",
-        cost: 0.000001,
-        cost_without_optimization: 0.00001,
-        savings_percent: 90,
+        cost: null,
+        cost_source: "unavailable",
+        cost_unavailable_reason: "unverified_model_price",
+        cost_without_optimization: null,
+        savings_percent: null,
         input_tokens: 8,
         output_tokens: 3,
         tags: {},

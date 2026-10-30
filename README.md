@@ -24,7 +24,7 @@ An experimental LLM optimization service for Claude, GPT, Gemini and Groq, with 
 
 ![TokenSave public landing page — caching, model routing and compression](assets/preview.jpg)
 
-[Architecture and trust boundaries](docs/ARCHITECTURE.md) · [Security verification](docs/SECURITY_HARDENING.md) · [Automated checks](https://github.com/Prathamg042004/tokensave/actions)
+[Server SDK](docs/SDK.md) · [Usage and accounting](docs/ACCOUNTING.md) · [Architecture and trust boundaries](docs/ARCHITECTURE.md) · [Security verification](docs/SECURITY_HARDENING.md) · [Automated checks](https://github.com/Prathamg042004/tokensave/actions)
 
 ---
 
@@ -36,10 +36,10 @@ invoice: **dollars saved**. Four independent layers stack up:
 
 | Layer | Effect | Mechanism |
 | --- | --- | --- |
-| Semantic cache | 100% saving on a cache hit | The request never reaches the provider |
+| Exact-match cache | 100% saving on a cache hit | The request never reaches the provider |
 | Cost-aware routing | Up to 66% cheaper per request | Simple prompts to a cheap model, complex prompts to a capable one |
 | Context summarisation | Large reduction on long chats | Old turns summarised, recent turns kept verbatim |
-| Prompt compression | Small reduction on every request | Filler phrases and redundant whitespace removed |
+| Prompt preservation | No destructive text changes | Compression disabled pending fidelity validation |
 
 > **On the numbers.** The percentages above and on the marketing site come from
 > internal measurement, not from a public, reproducible benchmark. A benchmark

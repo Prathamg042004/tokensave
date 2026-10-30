@@ -268,11 +268,12 @@ export default function Dashboard() {
         {tab === "overview" && (
           <div className="space-y-6">
             <section className="dash-setup" aria-label="Integration quick start"><div><span className="dash-eyebrow">Build your first integration</span><h2>From API key to first request.</h2><p>Connect a provider, try a prompt and inspect the response. Service-wide charts below are separate from your setup progress.</p><div className="dash-actions"><button className="dash-primary" onClick={()=>setTab("keys")}>Manage API keys →</button><a className="dash-secondary" href="/docs">Integration guide</a></div></div><div className="dash-steps"><div className="dash-step"><b>01</b>Choose your provider and API key</div><div className="dash-step"><b>02</b>Send a request in the playground</div><div className="dash-step"><b>03</b>Inspect routing and token estimates</div></div></section>
+            <p className="text-[12px] text-[#a9b5c8] mb-3">Published-rate USD estimates for known costs only. {t.unknown_cost_requests || 0} requests have unavailable cost. Savings cover cache repeats; routing savings are unmeasured. Older estimates are excluded.</p>
             <div className="metric-grid grid grid-cols-2 lg:grid-cols-5 gap-3">
               {[
                 { label: "Requests", value: t.total_requests, suffix: "", color: "#bba6ed", chart: reqData },
-                { label: "Est. tokens saved", value: t.tokens_saved, suffix: "", color: "#4ADE80", chart: savedData },
-                { label: "Est. cost saved", value: t.total_saved || 0, suffix: "", color: "#E8B94B", prefix: "$", decimals: 2, chart: null },
+                { label: "Cache tokens avoided", value: t.tokens_saved, suffix: "", color: "#4ADE80", chart: savedData },
+                { label: "Est. cache cost avoided", value: t.total_saved || 0, suffix: "", color: "#E8B94B", prefix: "$", decimals: 2, chart: null },
                 { label: "Error Rate", value: errorRate, suffix: "%", color: errorRate > 5 ? "#FF5F57" : "#4ADE80", chart: null },
               ].map((s, i) => (
                 <FadeUp key={i} delay={i * 0.05}>

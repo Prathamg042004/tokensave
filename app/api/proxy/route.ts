@@ -1,3 +1,5 @@
+import { accounting, cacheAccounting } from "../../../sdk/accounting.js";
+import { providerRequest, validResponse } from "../../../sdk/tokensave.js";
 import { keyOwner, privateCacheKey, accessResponse, readJson, consumeRateLimit, rateLimitScope } from "../../lib/security.mjs";
 import { NextRequest, NextResponse } from "next/server";
 import { Redis } from "@upstash/redis";
@@ -18,23 +20,6 @@ const MAX_BODY_SIZE = 500000;
 const MAX_MESSAGE_LENGTH = 100000;
 const MAX_MESSAGES = 100;
 
-// Model pricing per million tokens [input, output]
-const PRICING: Record<string, [number, number]> = {
-  "claude-haiku-4-5-20251001": [0.80, 4.00],
-  "claude-sonnet-4-6": [3.00, 15.00],
-  "claude-opus-4-8": [15.00, 75.00],
-  "gpt-4o-mini": [0.15, 0.60],
-  "gpt-4o": [2.50, 10.00],
-  "gpt-4-turbo": [10.00, 30.00],
-  "gemini-2.0-flash-lite": [0.075, 0.30],
-  "gemini-2.0-flash": [0.15, 0.60],
-  "gemini-1.5-pro": [1.25, 5.00],
-  "llama-3.1-8b-instant": [0.05, 0.08],
-  "llama-3.3-70b-versatile": [0.59, 0.79],
-  "mixtral-8x7b-32768": [0.24, 0.24],
-  "deepseek-r1-distill-llama-70b": [0.75, 0.99],
-};
-
 // Safe Redis operations
 async function rGet(key: string): Promise<any> {
   if (!redis) return null;
@@ -49,12 +34,12 @@ async function rSet(key: string, value: any, ttl: number): Promise<void> {
 async function logRequest(data: any): Promise<void> {
   if (!redis) return;
   try {
-    const entry = { ...data, timestamp: Date.now(), id: "req_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6) };
-    await redis.lpush("request_logs", JSON.stringify(entry));
-    await redis.ltrim("request_logs", 0, 999);
+    const entry = { ...data, accounting_version: 1, timestamp: Date.now(), id: "req_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6) };
+    await redis.lpush("billing:v1:request_logs", JSON.stringify(entry));
+    await redis.ltrim("billing:v1:request_logs", 0, 999);
 
     const today = new Date().toISOString().split("T")[0];
-    const key = "stats:" + today;
+    const key = "billing:v1:stats:" + today;
     await redis.hincrby(key, "total_requests", 1);
     await redis.hincrby(key, "tokens_saved", data.tokens_saved || 0);
     await redis.hincrby(key, "cache_hits", data.cache_hit ? 1 : 0);
@@ -67,19 +52,21 @@ async function logRequest(data: any): Promise<void> {
       await redis.ltrim("latency_log", 0, 99);
     }
 
-    const costMicro = Math.round((data.cost || 0) * 1000000);
-    if (costMicro > 0) await redis.hincrby(key, "total_cost_micro", costMicro);
-    const savedMicro = Math.round((data.cost_saved || 0) * 1000000);
-    if (savedMicro > 0) await redis.hincrby(key, "total_saved_micro", savedMicro);
+    if (data.cost == null) await redis.hincrby(key, "unknown_cost_requests", 1);
+    const costNano = Math.round((data.cost || 0) * 1000000000);
+    if (costNano > 0) await redis.hincrby(key, "total_cost_nano", costNano);
+    const savedNano = Math.round((data.cost_saved || 0) * 1000000000);
+    if (savedNano > 0) await redis.hincrby(key, "total_saved_nano", savedNano);
 
     if (data.userId) {
-      const userKey = "user_stats:" + data.userId + ":" + today;
+      const userKey = "billing:v1:user_stats:" + data.userId + ":" + today;
       const values = { total_requests:1, tokens_saved:data.tokens_saved || 0, cache_hits:data.cache_hit ? 1 : 0,
         total_input_tokens:data.input_tokens || 0,total_output_tokens:data.output_tokens || 0,
-        errors:data.is_error ? 1 : 0,total_cost_micro:costMicro,total_saved_micro:savedMicro };
+        errors:data.is_error ? 1 : 0,total_cost_nano:costNano,total_saved_nano:savedNano,
+        unknown_cost_requests: data.cost == null ? 1 : 0 };
       for (const [field,value] of Object.entries(values)) await redis.hincrby(userKey,field,value);
-      await redis.lpush("request_logs:" + data.userId, JSON.stringify(entry));
-      await redis.ltrim("request_logs:" + data.userId,0,99);
+      await redis.lpush("billing:v1:request_logs:" + data.userId, JSON.stringify(entry));
+      await redis.ltrim("billing:v1:request_logs:" + data.userId,0,99);
       await redis.lpush("audit_log:" + data.userId,JSON.stringify({event:data.is_error ? "api_error" : "api_request",timestamp:Date.now(),provider:data.provider,model:data.model}));
       await redis.ltrim("audit_log:" + data.userId,0,99);
       if (data.latency) {
@@ -92,22 +79,6 @@ async function logRequest(data: any): Promise<void> {
 }
 
 // Helpers
-function estimateTokens(text: string): number {
-  return Math.ceil((text || "").length / 4);
-}
-
-function calculateCost(model: string, inputTokens: number, outputTokens: number): number {
-  const p = PRICING[model] || [1, 5];
-  return (inputTokens * p[0] + outputTokens * p[1]) / 1000000;
-}
-
-function getExpensiveModel(provider: string): string {
-  if (provider === "anthropic") return "claude-sonnet-4-6";
-  if (provider === "openai") return "gpt-4o";
-  if (provider === "groq") return "llama-3.3-70b-versatile";
-  return "gemini-2.0-flash";
-}
-
 function detectComplexity(messages: any[]): "simple" | "complex" {
   const last = messages[messages.length - 1]?.content || "";
   const words = last.split(" ").length;
@@ -156,20 +127,9 @@ function pickModel(complexity: "simple" | "complex", provider: string): string {
   return complexity === "simple" ? "gemini-2.0-flash-lite" : "gemini-2.0-flash";
 }
 
+// Preserve arbitrary prose, code, whitespace and quoted instructions verbatim.
 function compressPrompt(text: string): { compressed: string; savedChars: number } {
-  if (text.length < 50) return { compressed: text, savedChars: 0 };
-
-  let c = text.replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
-  const fillers = [
-    "to be honest with you", "in my humble opinion", "as you probably know",
-    "as you may already know", "I would like to say that", "what I want to say is",
-    "the thing is that", "at the end of the day", "for what it's worth",
-    "needless to say", "it goes without saying", "as a matter of fact",
-  ];
-  for (const f of fillers) c = c.replace(new RegExp(f, "gi"), "");
-  c = c.replace(/\s+/g, " ").trim();
-
-  return { compressed: c, savedChars: text.length - c.length };
+  return { compressed: text, savedChars: 0 };
 }
 
 // Input validation
@@ -182,11 +142,12 @@ function validateInput(body: any): string | null {
   }
   for (let i = 0; i < body.messages.length; i++) {
     const msg = body.messages[i];
-    if (!msg.role || !msg.content) return "messages[" + i + "] must have role and content";
+    if (!msg || !msg.role || !msg.content) return "messages[" + i + "] must have role and content";
     if (!["user", "assistant", "system"].includes(msg.role)) return "messages[" + i + "].role must be user, assistant, or system";
     if (typeof msg.content !== "string") return "messages[" + i + "].content must be a string";
     if (msg.content.length > MAX_MESSAGE_LENGTH) return "messages[" + i + "].content exceeds 100K character limit";
   }
+  if (!body.messages.some((m: {role: string}) => m.role !== "system")) return "At least one non-system message is required";
   if (!body.apiKey || typeof body.apiKey !== "string" || body.apiKey.length < 10) {
     return "A valid apiKey is required";
   }
@@ -195,38 +156,15 @@ function validateInput(body: any): string | null {
   if (body.provider && !validProviders.includes(body.provider)) {
     return "Invalid provider. Use: " + validProviders.join(", ");
   }
+  if (body.quality && !["auto", "max_savings", "max_quality"].includes(body.quality)) return "Invalid quality mode";
+  if (body.model !== undefined && (typeof body.model !== "string" || !/^[a-zA-Z0-9._:/-]{1,200}$/.test(body.model))) return "Invalid model";
+  if (body.fallbackKeys !== undefined && (!body.fallbackKeys || typeof body.fallbackKeys !== "object" || Array.isArray(body.fallbackKeys) || Object.entries(body.fallbackKeys).some(([p,k]) => !validProviders.includes(p) || typeof k !== "string" || k.length < 10 || k.length > 500))) return "Invalid fallbackKeys";
   return null;
 }
 
 // Build provider request
-function buildProviderRequest(provider: string, model: string, apiKey: string, messages: any[]): { url: string; headers: any; body: any } {
-  if (provider === "anthropic") {
-    return {
-      url: "https://api.anthropic.com/v1/messages",
-      headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
-      body: { model, max_tokens: 1024, messages },
-    };
-  }
-  if (provider === "openai") {
-    return {
-      url: "https://api.openai.com/v1/chat/completions",
-      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
-      body: { model, messages },
-    };
-  }
-  if (provider === "groq") {
-    return {
-      url: "https://api.groq.com/openai/v1/chat/completions",
-      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
-      body: { model, messages },
-    };
-  }
-  // Google
-  return {
-    url: "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + apiKey,
-    headers: { "Content-Type": "application/json" },
-    body: { contents: messages.map((m: any) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })) },
-  };
+function buildProviderRequest(provider: string, model: string, apiKey: string, messages: {role: string; content: string}[]) {
+  return providerRequest(provider, model, apiKey, messages, 1024);
 }
 
 // POST handler
@@ -283,40 +221,29 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Strip control characters from messages
+    // Retain validated text verbatim, including whitespace and code indentation
     const cleanMessages = messages.map((m: any) => ({
       role: m.role,
-      content: m.content.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ""),
+      content: m.content,
     }));
-
-    // Check cache
-    const cacheKey = privateCacheKey(cleanMessages, provider, requestedModel || "auto", quality, apiKey);
-    const cached = await rGet(cacheKey);
-
-    if (cached) {
-      const latency = Date.now() - startTime;
-      await logRequest({ cache_hit: true, tokens_saved: 500, provider, model: "cached", latency, userId, tags: cleanTags, is_error: false, cost: 0, cost_saved: 0.001, webhookUrl });
-      const cachedData = typeof cached === "string" ? JSON.parse(cached) : cached;
-      return NextResponse.json({
-        ...cachedData,
-        tokensave_meta: {
-          request_id: "req_" + Date.now().toString(36),
-          cache_hit: true,
-          tokens_saved: "100%",
-          method: "cache",
-          quality_mode: quality,
-          latency_ms: latency,
-          cost: 0,
-          tags: cleanTags,
-        },
-      }, {
-        headers: { "X-RateLimit-Remaining": String(Math.max(0, RATE_LIMIT - rlCount)), "X-RateLimit-Limit": String(RATE_LIMIT) },
-      });
-    }
 
     // Detect complexity and pick model
     const complexity = detectComplexity(cleanMessages);
     const model = requestedModel || (quality === "max_quality" ? pickModel("complex", provider) : pickModel(complexity, provider));
+
+    // Check cache
+    const cacheKey = "accounting:v1:" + privateCacheKey(cleanMessages, provider, model, quality, apiKey);
+    const cached = await rGet(cacheKey);
+
+    const cacheRecord = typeof cached === "string" ? JSON.parse(cached) : cached;
+    if (cacheRecord?.version === 1 && cacheRecord.accounting && cacheRecord.data) {
+      const latency = Date.now() - startTime;
+      const meta = cacheAccounting(cacheRecord.accounting);
+      await logRequest({ ...meta, cache_hit: true, provider, model: meta.model_used, latency, userId, tags: cleanTags, is_error: false });
+      return NextResponse.json({ ...cacheRecord.data, tokensave_meta: {
+        ...meta, request_id: crypto.randomUUID(), cache_hit: true, method: "cache", quality_mode: quality, latency_ms: latency, tags: cleanTags,
+      } }, { headers: { "X-RateLimit-Remaining": String(Math.max(0, RATE_LIMIT - rlCount)), "X-RateLimit-Limit": String(RATE_LIMIT) } });
+    }
 
     // Compress prompt
     let optimizedMessages = cleanMessages;
@@ -330,11 +257,11 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const inputTokens = optimizedMessages.reduce((sum: number, m: any) => sum + estimateTokens(m.content), 0);
+    const deadline = AbortSignal.timeout(30000);
 
     // Build and send request
     const { url: apiUrl, headers, body: apiBody } = buildProviderRequest(provider, model, apiKey, optimizedMessages);
-    const aiResponse = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify(apiBody), redirect:"error", signal:AbortSignal.timeout(30000) });
+    const aiResponse = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify(apiBody), redirect:"error", signal:deadline });
     const aiData = await aiResponse.json();
     const latency = Date.now() - startTime;
 
@@ -352,35 +279,31 @@ export async function POST(req: NextRequest) {
           if (!fbKey) continue;
 
           try {
-            const fbModel = pickModel(complexity, fbProvider);
+            const fbModel = pickModel(quality === "max_quality" ? "complex" : complexity, fbProvider);
             const { url: fbUrl, headers: fbHeaders, body: fbBody } = buildProviderRequest(fbProvider, fbModel, fbKey, optimizedMessages);
-            const fbResponse = await fetch(fbUrl, { method: "POST", headers: fbHeaders, body: JSON.stringify(fbBody), redirect:"error", signal:AbortSignal.timeout(30000) });
+            const fbResponse = await fetch(fbUrl, { method: "POST", headers: fbHeaders, body: JSON.stringify(fbBody), redirect:"error", signal:deadline });
 
-            if (fbResponse.status < 400) {
+            if (fbResponse.ok) {
               const fbData = await fbResponse.json();
               const fbLatency = Date.now() - startTime;
-              const outputTokens = estimateTokens(JSON.stringify(fbData).slice(0, 2000));
-              const cost = calculateCost(fbModel, inputTokens, outputTokens);
-              const costWithout = calculateCost(getExpensiveModel(fbProvider), inputTokens, outputTokens);
+              if (!validResponse(fbProvider, fbData)) continue;
+              const meta = accounting(fbProvider, fbModel, fbData);
 
               // Fallback responses are not cached under the primary provider identity.
               await logRequest({
-                cache_hit: false, tokens_saved: savedChars, provider: fbProvider, model: fbModel,
+                ...meta, cache_hit: false, provider: fbProvider, model: meta.model_used,
                 complexity, latency: fbLatency, userId, tags: cleanTags, is_error: false,
-                input_tokens: inputTokens, output_tokens: outputTokens,
-                cost, cost_saved: costWithout - cost, fallback: true, original_provider: provider, webhookUrl,
+                fallback: true, original_provider: provider, webhookUrl,
               });
 
               return NextResponse.json({
                 ...fbData,
                 tokensave_meta: {
-                  request_id: "req_" + Date.now().toString(36),
-                  cache_hit: false, model_used: fbModel, complexity, chars_saved: savedChars,
+                  ...meta, request_id: crypto.randomUUID(),
+                  cache_hit: false, complexity, chars_saved: savedChars,
                   quality_mode: quality, method: "fallback", latency_ms: fbLatency,
                   original_provider: provider, fallback_provider: fbProvider,
-                  cost, cost_without_optimization: costWithout,
-                  savings_percent: Math.round(((costWithout - cost) / costWithout) * 100),
-                  input_tokens: inputTokens, output_tokens: outputTokens, tags: cleanTags,
+                  tags: cleanTags,
                 },
               }, {
                 headers: { "X-RateLimit-Remaining": String(Math.max(0, RATE_LIMIT - rlCount)), "X-RateLimit-Limit": String(RATE_LIMIT) },
@@ -407,28 +330,21 @@ export async function POST(req: NextRequest) {
       }, { status: aiResponse.status });
     }
 
-    // Success — cache and return
-    const outputTokens = estimateTokens(JSON.stringify(aiData).slice(0, 2000));
-    const cost = calculateCost(model, inputTokens, outputTokens);
-    const costWithout = calculateCost(getExpensiveModel(provider), inputTokens, outputTokens);
-
-    await rSet(cacheKey, aiData, CACHE_TTL);
-    await logRequest({
-      cache_hit: false, tokens_saved: savedChars, provider, model, complexity, latency,
-      userId, tags: cleanTags, is_error: false, input_tokens: inputTokens, output_tokens: outputTokens,
-      cost, cost_saved: costWithout - cost, webhookUrl,
-    });
+    // Provider usage is authoritative; dollar values use versioned public rates.
+    if (!validResponse(provider, aiData)) return NextResponse.json({error:"Invalid provider response"},{status:502});
+    const meta = accounting(provider, model, aiData);
+    await rSet(cacheKey, { version: 1, data: aiData, accounting: meta }, CACHE_TTL);
+    await logRequest({ ...meta, cache_hit: false, provider, model: meta.model_used, complexity, latency,
+      userId, tags: cleanTags, is_error: false });
 
     return NextResponse.json({
       ...aiData,
       tokensave_meta: {
-        request_id: "req_" + Date.now().toString(36),
-        cache_hit: false, model_used: model, complexity, chars_saved: savedChars,
+        ...meta, request_id: crypto.randomUUID(),
+        cache_hit: false, complexity, chars_saved: savedChars,
         quality_mode: quality, latency_ms: latency,
         method: complexity === "simple" ? "routed_to_cheap" : "routed_to_smart",
-        cost, cost_without_optimization: costWithout,
-        savings_percent: Math.round(((costWithout - cost) / costWithout) * 100),
-        input_tokens: inputTokens, output_tokens: outputTokens, tags: cleanTags,
+        tags: cleanTags,
       },
     }, {
       headers: { "X-RateLimit-Remaining": String(Math.max(0, RATE_LIMIT - rlCount)), "X-RateLimit-Limit": String(RATE_LIMIT) },
@@ -447,12 +363,12 @@ export async function GET() {
     status: "active",
     service: "TokenSave API Proxy",
     version: "3.1.0",
-    docs: "https://tokensave.vercel.app/docs",
-    security: "https://tokensave.vercel.app/security",
-    changelog: "https://tokensave.vercel.app/changelog",
-    health: "https://tokensave.vercel.app/api/health",
+    docs: "https://tokensave.in/docs",
+    security: "https://tokensave.in/security",
+    changelog: "https://tokensave.in/changelog",
+    health: "https://tokensave.in/api/health",
     providers: ["anthropic", "openai", "google", "groq"],
-    supported_models: Object.keys(PRICING),
+    supported_models: ["claude-haiku-4-5-20251001", "claude-sonnet-4-6", "gpt-4o-mini", "gpt-4o", "gemini-2.0-flash-lite", "gemini-2.0-flash", "llama-3.1-8b-instant", "llama-3.3-70b-versatile"],
     quality_modes: {
       auto: "Smart routing — defaults to quality when unsure (recommended)",
       max_savings: "Aggressive cost optimization",
@@ -462,9 +378,9 @@ export async function GET() {
     features: [
       "Credential-isolated exact-match caching with 30-minute TTL",
       "Smart model routing by complexity",
-      "Safe prompt compression",
+      "Verbatim prompt preservation",
       "Multi-provider automatic fallback",
-      "Real per-token cost tracking",
+      "Provider token usage; published-rate cost estimates when verified",
       "Latency monitoring (avg + P95)",
       "Custom request tags",
       "Account-scoped audit logs",
@@ -475,15 +391,15 @@ export async function GET() {
       "Security audit logging",
     ],
     endpoints: {
-      proxy: { method: "POST", url: "https://tokensave.vercel.app/api/proxy" },
-      batch: { method: "POST", url: "https://tokensave.vercel.app/api/batch" },
-      smart_context: { method: "POST", url: "https://tokensave.vercel.app/api/smart-context" },
-      trim_context: { method: "POST", url: "https://tokensave.vercel.app/api/trim-context" },
-      stats: { method: "GET", url: "https://tokensave.vercel.app/api/stats" },
-      health: { method: "GET", url: "https://tokensave.vercel.app/api/health" },
-      teams: { method: "POST", url: "https://tokensave.vercel.app/api/teams" },
-      webhooks: { method: "POST", url: "https://tokensave.vercel.app/api/webhooks" },
-      audit: { method: "GET", url: "https://tokensave.vercel.app/api/audit" },
+      proxy: { method: "POST", url: "https://tokensave.in/api/proxy" },
+      batch: { method: "POST", url: "https://tokensave.in/api/batch" },
+      smart_context: { method: "POST", url: "https://tokensave.in/api/smart-context" },
+      trim_context: { method: "POST", url: "https://tokensave.in/api/trim-context" },
+      stats: { method: "GET", url: "https://tokensave.in/api/stats" },
+      health: { method: "GET", url: "https://tokensave.in/api/health" },
+      teams: { method: "POST", url: "https://tokensave.in/api/teams" },
+      webhooks: { method: "POST", url: "https://tokensave.in/api/webhooks" },
+      audit: { method: "GET", url: "https://tokensave.in/api/audit" },
     },
   });
 }
