@@ -18,10 +18,10 @@ try {
 function loadRoute(name, redis) {
   const routeName = name;
   const source=fs.readFileSync(new URL('../app/api/'+name+'/route.ts',import.meta.url),'utf8');
-  const module={exports:{}};
+  const routeModule={exports:{}};
   const require=name=>name==='next/server'?{NextRequest:Request,NextResponse:Response}:name==='@upstash/redis'?{Redis:class {constructor(){return redis;}}}:name.endsWith('security.mjs')?security:createRequire(new URL('../app/api/'+routeName+'/route.ts',import.meta.url))(name);
-  new Function('require','exports','module',compile(source))(require,module.exports,module);
-  return module.exports;
+  new Function('require','exports','module',compile(source))(require,routeModule.exports,routeModule);
+  return routeModule.exports;
 }
 function storage() {
   const calls=[];const values=new Map();

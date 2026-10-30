@@ -1,83 +1,82 @@
 import { NextRequest, NextResponse } from "next/server";
 import { POST as proxyPost } from "../proxy/route";
-import { readJson, accessResponse } from "../../lib/security.mjs";
-
-export async function POST(req: NextRequest) {
+import { readJson, accessResponse, AccessError } from "../../lib/security.mjs";
+import { text, record, proxyInput } from "../../lib/validation.mjs";
+export async function POST(req: Request) {
   try {
     const body = await readJson(req);
-    const { prompts, provider = "anthropic", apiKey } = body;
-
-    if (!prompts || !Array.isArray(prompts) || prompts.length === 0) {
-      return NextResponse.json({ error: "prompts array is required" }, { status: 400 });
-    }
-
-    if (prompts.length > 50) {
-      return NextResponse.json({ error: "Maximum 50 prompts per batch" }, { status: 400 });
-    }
-
-    if (!apiKey) {
-      return NextResponse.json({ error: "apiKey is required" }, { status: 400 });
-    }
-
-    const results = [];
-    const startTime = Date.now();
-
-    for (const prompt of prompts) {
-      try {
-        const res = await proxyPost(new NextRequest(new URL("/api/proxy", req.url), {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "x-forwarded-for": req.headers.get("x-forwarded-for") || "unknown" },
-          body: JSON.stringify({
-            provider,
-            apiKey,
-            tsKey: body.tsKey,
-            messages: [{ role: "user", content: typeof prompt === "string" ? prompt : prompt.content }],
-          }),
-        }));
-        const data = await res.json();
-        results.push({
-          prompt: typeof prompt === "string" ? prompt : prompt.content,
-          status: res.ok ? "success" : "error",
-          response: data,
-        });
-      } catch (e: any) {
-        results.push({
-          prompt: typeof prompt === "string" ? prompt : prompt.content,
-          status: "error",
-          error: e.message,
-        });
-      }
-    }
-
-    const totalTime = Date.now() - startTime;
-    const successful = results.filter((r) => r.status === "success").length;
-    const cached = results.filter((r) => r.response?.tokensave_meta?.cache_hit).length;
-
-    return NextResponse.json({
-      batch_id: "batch_" + Date.now().toString(36),
-      total: prompts.length,
-      successful,
-      cached,
-      processing_time_ms: totalTime,
-      results,
+    if (
+      !Array.isArray(body.prompts) ||
+      body.prompts.length < 1 ||
+      body.prompts.length > 50
+    )
+      throw new AccessError(400, "Expected 1–50 prompts.");
+    // Validate the entire batch before any provider call can incur a charge.
+    const prompts = body.prompts.map((p) =>
+      text(record(p) ? p.content : p, "prompt", 100000),
+    );
+    const input = proxyInput({
+      ...body,
+      messages: [{ role: "user", content: prompts[0] }],
     });
-  } catch (error: any) {
+    const start = Date.now(),
+      signal = AbortSignal.any([req.signal, AbortSignal.timeout(45000)]);
+    const results: {
+      prompt: string;
+      status: string;
+      response?: Record<string, unknown>;
+      error?: string;
+    }[] = [];
+    for (const prompt of prompts) {
+      if (signal.aborted) {
+        results.push({
+          prompt,
+          status: "error",
+          error: "Batch deadline reached; item was not sent.",
+        });
+        continue;
+      }
+      const response = await proxyPost(
+        new NextRequest(new URL("/api/proxy", req.url), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...input,
+            messages: [{ role: "user", content: prompt }],
+          }),
+          signal,
+        }),
+      );
+      const data: unknown = await response.json();
+      results.push({
+        prompt,
+        status: response.ok ? "success" : "error",
+        response: record(data) ? data : { error: "Invalid response" },
+      });
+    }
+    return NextResponse.json(
+      {
+        batch_id: crypto.randomUUID(),
+        total: prompts.length,
+        successful: results.filter((r) => r.status === "success").length,
+        cached: results.filter(
+          (r) =>
+            record(r.response?.tokensave_meta) &&
+            r.response.tokensave_meta.cache_hit === true,
+        ).length,
+        processing_time_ms: Date.now() - start,
+        results,
+      },
+      { headers: { "Cache-Control": "no-store" } },
+    );
+  } catch (error) {
     return accessResponse(error);
   }
 }
-
 export async function GET() {
   return NextResponse.json({
     service: "TokenSave Batch API",
-    description: "Process multiple prompts in a single request",
-    usage: {
-      method: "POST",
-      body: {
-        provider: "anthropic | openai | google | groq",
-        apiKey: "your-api-key",
-        prompts: ["prompt 1", "prompt 2", "prompt 3"],
-      },
-      limits: "Maximum 50 prompts per batch",
-    },
+    description:
+      "Sequential processing of 1–50 validated text prompts with a shared 45-second deadline. Results identify unprocessed items.",
   });
 }

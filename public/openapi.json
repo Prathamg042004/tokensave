@@ -3,7 +3,7 @@
   "info": {
     "title": "TokenSave integration API",
     "version": "3.1.0",
-    "description": "Custom non-streaming text API. This contract documents recommended inputs and current response shapes, not a production assurance. No verified authentication scheme is supplied by tsKey. Native provider responses vary; cache isolation needs review. Synthetic-data evaluation is recommended. Dashboard management routes are intentionally outside this integration contract."
+    "description": "Custom non-streaming text API. This contract documents recommended inputs and current response shapes, not a production assurance. An optional validated tsKey attributes usage to an account. Native provider success responses vary. Credential-isolated caching is scoped by provider, resolved model, quality and messages. Synthetic-data evaluation is recommended. Dashboard management routes are intentionally outside this integration contract."
   },
   "servers": [
     {
@@ -199,6 +199,16 @@
               }
             }
           },
+          "422": {
+            "description": "Preserved content exceeds the estimated context budget",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Proxy rate limit",
             "content": {
@@ -216,7 +226,7 @@
                 "schema": {
                   "type": "integer"
                 },
-                "description": "60 seconds for the proxy limiter; upstream failures may omit it."
+                "description": "Remaining Redis window lifetime for the proxy limiter; upstream failures may omit it."
               }
             }
           },
@@ -233,8 +243,38 @@
               }
             }
           },
+          "502": {
+            "description": "Invalid provider response or connection failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication or storage unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Provider deadline or cancellation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "default": {
-            "description": "Other upstream HTTP errors can be forwarded; shape is provider-dependent.",
+            "description": "Other upstream HTTP statuses may be forwarded with a sanitized error object.",
             "content": {
               "application/json": {
                 "schema": {
@@ -308,7 +348,7 @@
       "post": {
         "operationId": "batch",
         "summary": "Process a batch",
-        "description": "Processes prompts sequentially through the proxy. This is a synchronous response, not a background job or a provider Batch API discount.\n\nInspect every response.error and response.tokensave_meta.is_error: the current batch handler can label an upstream HTTP error as success. tsKey, model, quality, tags and fallbackKeys are not forwarded. It currently calls the legacy tokensave.vercel.app proxy host; evaluate this limitation before adopting batch.",
+        "description": "Validates the whole batch before provider calls, then processes sequentially through the local proxy with a shared 45-second deadline. This is not a provider Batch API discount.\n\nInspect each result status. All prompts are validated first. tsKey, model, quality, tags and fallbackKeys are forwarded locally. Unprocessed items are marked error when the deadline expires.",
         "tags": [
           "Integration"
         ],
@@ -360,8 +400,28 @@
               }
             }
           },
+          "401": {
+            "description": "Invalid account or provider credential",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "413": {
-            "description": "Declared body too large",
+            "description": "Request body exceeds the streamed byte limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Preserved content exceeds the estimated context budget",
             "content": {
               "application/json": {
                 "schema": {
@@ -381,7 +441,37 @@
             }
           },
           "500": {
-            "description": "Parsing or unexpected failure",
+            "description": "Unexpected internal failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Invalid provider response or connection failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication or storage unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Provider deadline or cancellation",
             "content": {
               "application/json": {
                 "schema": {
@@ -414,7 +504,7 @@
       "post": {
         "operationId": "trim_context",
         "summary": "Trim conversation history",
-        "description": "Keeps system messages and the final message, then fits earlier non-system messages from newest to oldest. Returns messages; it does not call an AI provider.\n\nA target, not a strict token ceiling: retained system/final messages may already exceed it. Counts are estimates, not a model tokenizer. Recheck output before sending it onward.",
+        "description": "Keeps system messages and the final message, then fits earlier non-system messages from newest to oldest. Returns messages; it does not call an AI provider.\n\nEnforces the character-based estimate ceiling. Returns 422 if preserved system/latest conversation messages exceed it. Counts are estimates, not a model tokenizer; recheck with your provider. Original message order is preserved.",
         "tags": [
           "Integration"
         ],
@@ -462,8 +552,28 @@
               }
             }
           },
+          "401": {
+            "description": "Invalid account or provider credential",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "413": {
-            "description": "Declared body too large",
+            "description": "Request body exceeds the streamed byte limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Preserved content exceeds the estimated context budget",
             "content": {
               "application/json": {
                 "schema": {
@@ -483,7 +593,37 @@
             }
           },
           "500": {
-            "description": "Parsing or unexpected failure",
+            "description": "Unexpected internal failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Invalid provider response or connection failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication or storage unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Provider deadline or cancellation",
             "content": {
               "application/json": {
                 "schema": {
@@ -522,7 +662,7 @@
       "post": {
         "operationId": "smart_context",
         "summary": "Summarize older messages",
-        "description": "Uses deterministic text extraction, not an LLM: collects recent topic snippets, decision phrases and a small code block from older messages. Keeps system messages and recent conversation turns.\n\nOn optimization returns optimized:true, original_messages, optimized_messages, messages_summarized, messages_kept, token estimates, percent_saved and messages. Summary may lose details, exceed the target or even increase tokens. No fixed savings or quality guarantee.",
+        "description": "Uses heuristic excerpts, not an LLM. Preserves system messages and requested recent turns; inserts a summary as untrusted user content only when it fits the estimated budget. Otherwise trims older content.\n\nReturns 422 when preserved content cannot fit. Successful output never exceeds the character-estimated budget or increases estimated tokens. details_may_be_lost identifies discarded history; summary_used identifies excerpts. This is not a provider-token or quality guarantee.",
         "tags": [
           "Integration"
         ],
@@ -566,8 +706,28 @@
               }
             }
           },
+          "401": {
+            "description": "Invalid account or provider credential",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "413": {
-            "description": "Declared body too large",
+            "description": "Request body exceeds the streamed byte limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Preserved content exceeds the estimated context budget",
             "content": {
               "application/json": {
                 "schema": {
@@ -587,7 +747,37 @@
             }
           },
           "500": {
-            "description": "Parsing or unexpected failure",
+            "description": "Unexpected internal failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Invalid provider response or connection failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication or storage unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Provider deadline or cancellation",
             "content": {
               "application/json": {
                 "schema": {
@@ -704,7 +894,8 @@
           "content": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 100000
+            "maxLength": 100000,
+            "pattern": "\\S"
           }
         },
         "additionalProperties": false
@@ -730,6 +921,7 @@
             "type": "string",
             "minLength": 10,
             "maxLength": 500,
+            "pattern": "^[!-~]{10,500}$",
             "writeOnly": true
           },
           "messages": {
@@ -742,6 +934,8 @@
           },
           "tsKey": {
             "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
             "description": "Validated TokenSave credential for account attribution and rate limiting."
           },
           "model": {
@@ -769,7 +963,7 @@
             "additionalProperties": {
               "type": "string"
             },
-            "description": "First 20 entries considered; key/value truncation applies."
+            "description": "Up to 20 non-empty string values; key/value lengths are validated."
           },
           "userId": {
             "type": "string",
@@ -1046,6 +1240,8 @@
         "properties": {
           "messages": {
             "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
             "items": {
               "$ref": "#/components/schemas/Message"
             }
@@ -1053,8 +1249,9 @@
           "maxTokens": {
             "type": "integer",
             "minimum": 1,
+            "maximum": 1000000,
             "default": 4000,
-            "description": "Recommended input constraint; not enforced by current route. Target is not a hard ceiling."
+            "description": "Enforced character-estimate budget; preserved content that cannot fit returns 422."
           }
         }
       },
@@ -1105,6 +1302,7 @@
           "messages": {
             "type": "array",
             "minItems": 1,
+            "maxItems": 100,
             "items": {
               "$ref": "#/components/schemas/Message"
             }
@@ -1112,15 +1310,17 @@
           "maxTokens": {
             "type": "integer",
             "minimum": 1,
+            "maximum": 1000000,
             "default": 4000
           },
           "keepRecent": {
             "type": "integer",
             "minimum": 1,
+            "maximum": 100,
             "default": 6
           }
         },
-        "description": "Positive integer limits are recommended client constraints, not runtime-enforced bounds."
+        "description": "Positive integer limits are enforced. Preserved content that cannot fit returns 422."
       },
       "SmartResponse": {
         "type": "object",
@@ -1165,6 +1365,8 @@
           },
           "messages": {
             "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
             "items": {
               "$ref": "#/components/schemas/Message"
             }

@@ -1,90 +1,158 @@
-import { requireUser, assertOwner, accessResponse, readJson } from "../../lib/security.mjs";
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { Redis } from "@upstash/redis";
-
-let redis: any = null;
+import {
+  requireUser,
+  assertOwner,
+  accessResponse,
+  readJson,
+  AccessError,
+} from "../../lib/security.mjs";
+import { text, record } from "../../lib/validation.mjs";
+import type { Team } from "../../types";
+let redis: Redis | null = null;
 try {
-  redis = new Redis({
-    url: process.env.UPSTASH_REDIS_REST_URL || "",
-    token: process.env.UPSTASH_REDIS_REST_TOKEN || "",
-  });
-} catch (e) {}
-
-export async function POST(req: NextRequest) {
+  const url = process.env.UPSTASH_REDIS_REST_URL,
+    token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (url && token) redis = new Redis({ url, token });
+} catch {}
+function parseTeam(raw: unknown): Team {
+  let value: unknown;
   try {
-    const user = await requireUser(req);
-    const body = await readJson(req);
+    value = typeof raw === "string" ? JSON.parse(raw) : raw;
+  } catch {
+    throw new AccessError(503, "Team data unavailable.");
+  }
+  if (
+    !record(value) ||
+    typeof value.id !== "string" ||
+    typeof value.owner !== "string" ||
+    typeof value.name !== "string" ||
+    typeof value.created !== "number" ||
+    !Array.isArray(value.members) ||
+    value.members.some(
+      (m) =>
+        !record(m) ||
+        typeof m.email !== "string" ||
+        typeof m.role !== "string" ||
+        typeof m.joined !== "number",
+    )
+  )
+    throw new AccessError(503, "Team data unavailable.");
+  return structuredClone(value) as unknown as Team;
+}
+export async function POST(req: Request) {
+  try {
+    const user = await requireUser(req),
+      body = await readJson(req);
     assertOwner(body.userId, user.id);
-    body.userId = user.id;
-    body.email = user.email;
-    const { action, userId, teamName, memberEmail, role = "member" } = body;
-
-    if (!["member", "admin", "viewer"].includes(role)) return NextResponse.json({error:"Invalid role"},{status:400});
-    if (!redis) return NextResponse.json({error:"Storage unavailable"},{status:503});
-    if (!userId) return NextResponse.json({ error: "userId required" }, { status: 400 });
-
+    const action = text(body.action, "action", 20);
+    if (!["create", "invite", "remove", "get"].includes(action))
+      throw new AccessError(400, "Invalid action.");
+    if (!redis) throw new AccessError(503, "Storage unavailable.");
+    const role = body.role ?? "member";
+    if (role !== "member" && role !== "admin" && role !== "viewer")
+      throw new AccessError(400, "Invalid role.");
     if (action === "create") {
-      if (!teamName) return NextResponse.json({ error: "teamName required" }, { status: 400 });
-      const team = {
-        id: "team_" + Date.now().toString(36),
-        name: teamName,
-        owner: userId,
-        members: [{ userId, email: body.email || "", role: "owner", joined: Date.now() }],
+      const team: Team = {
+        id: "team_" + crypto.randomUUID(),
+        name: text(body.teamName, "teamName", 100),
+        owner: user.id,
+        members: [
+          {
+            userId: user.id,
+            email: user.email,
+            role: "owner",
+            joined: Date.now(),
+          },
+        ],
         created: Date.now(),
       };
-      if (redis) {
-        await redis.set("team:" + team.id, JSON.stringify(team));
-        await redis.set("user_team:" + userId, team.id);
-      }
-      return NextResponse.json({ team });
+      const created = await redis.eval(
+        `
+        if redis.call('EXISTS', KEYS[1]) == 1 then return 0 end
+        redis.call('SET', KEYS[1], ARGV[1])
+        redis.call('SET', KEYS[2], ARGV[2])
+        return 1
+      `,
+        ["user_team:" + user.id, "team:" + team.id],
+        [team.id, JSON.stringify(team)],
+      );
+      if (created !== 1)
+        throw new AccessError(409, "An account team already exists.");
+      return NextResponse.json(
+        { team },
+        { headers: { "Cache-Control": "no-store" } },
+      );
     }
-
+    const teamId = await redis.get<string>("user_team:" + user.id);
+    if (!teamId) {
+      if (action === "get")
+        return NextResponse.json(
+          { team: null },
+          { headers: { "Cache-Control": "no-store" } },
+        );
+      throw new AccessError(404, "No team found.");
+    }
+    const raw = await redis.get("team:" + teamId);
+    if (!raw) throw new AccessError(404, "Team not found.");
+    const team = parseTeam(raw);
+    if (team.owner !== user.id)
+      throw new AccessError(
+        403,
+        "Only the team owner can access this management endpoint.",
+      );
+    if (action === "get")
+      return NextResponse.json(
+        { team },
+        { headers: { "Cache-Control": "no-store" } },
+      );
+    const email = text(body.memberEmail, "memberEmail", 254)
+      .trim()
+      .toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+      throw new AccessError(400, "Invalid memberEmail.");
     if (action === "invite") {
-      if (!memberEmail) return NextResponse.json({ error: "memberEmail required" }, { status: 400 });
-      const teamId = redis ? await redis.get("user_team:" + userId) : null;
-      if (!teamId) return NextResponse.json({ error: "No team found" }, { status: 404 });
-      const teamData = redis ? await redis.get("team:" + teamId) : null;
-      if (!teamData) return NextResponse.json({ error: "Team not found" }, { status: 404 });
-      const team = typeof teamData === "string" ? JSON.parse(teamData) : teamData;
-      if (team.owner !== userId) return NextResponse.json({ error: "Only team owner can invite" }, { status: 403 });
-      team.members.push({ email: memberEmail, role, joined: Date.now(), status: "invited" });
-      if (redis) await redis.set("team:" + teamId, JSON.stringify(team));
-      return NextResponse.json({ team });
+      if (team.members.length >= 100)
+        throw new AccessError(409, "Team member limit reached.");
+      if (team.members.some((m) => m.email.toLowerCase() === email))
+        throw new AccessError(409, "Member already exists.");
+      team.members.push({ email, role, joined: Date.now(), status: "invited" });
+    } else {
+      if (
+        team.members.some(
+          (m) => m.role === "owner" && m.email.toLowerCase() === email,
+        )
+      )
+        throw new AccessError(400, "The owner cannot be removed.");
+      team.members = team.members.filter(
+        (m) => m.email.toLowerCase() !== email,
+      );
     }
-
-    if (action === "remove") {
-      if (!memberEmail) return NextResponse.json({ error: "memberEmail required" }, { status: 400 });
-      const teamId = redis ? await redis.get("user_team:" + userId) : null;
-      if (!teamId) return NextResponse.json({ error: "No team found" }, { status: 404 });
-      const teamData = redis ? await redis.get("team:" + teamId) : null;
-      if (!teamData) return NextResponse.json({ error: "Team not found" }, { status: 404 });
-      const team = typeof teamData === "string" ? JSON.parse(teamData) : teamData;
-      if (team.owner !== userId) return NextResponse.json({ error: "Only team owner can remove" }, { status: 403 });
-      team.members = team.members.filter((m: any) => m.email !== memberEmail);
-      if (redis) await redis.set("team:" + teamId, JSON.stringify(team));
-      return NextResponse.json({ team });
-    }
-
-    if (action === "get") {
-      const teamId = redis ? await redis.get("user_team:" + userId) : null;
-      if (!teamId) return NextResponse.json({ team: null });
-      const teamData = redis ? await redis.get("team:" + teamId) : null;
-      if (!teamData) return NextResponse.json({ team: null });
-      const team = typeof teamData === "string" ? JSON.parse(teamData) : teamData;
-      return NextResponse.json({ team });
-    }
-
-    return NextResponse.json({ error: "Invalid action" }, { status: 400 });
-  } catch (error: any) {
+    const expected = typeof raw === "string" ? raw : JSON.stringify(raw);
+    const updated = await redis.eval(
+      `
+      if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
+      redis.call('SET', KEYS[1], ARGV[2])
+      return 1
+    `,
+      ["team:" + teamId],
+      [expected, JSON.stringify(team)],
+    );
+    if (updated !== 1)
+      throw new AccessError(409, "Team changed. Reload and retry.");
+    return NextResponse.json(
+      { team },
+      { headers: { "Cache-Control": "no-store" } },
+    );
+  } catch (error) {
     return accessResponse(error);
   }
 }
-
 export async function GET() {
   return NextResponse.json({
     service: "TokenSave Teams",
-    description: "Create teams, invite members, manage roles",
-    actions: { create: "Create a new team", invite: "Invite a member by email", remove: "Remove a member", get: "Get team details" },
-    roles: ["owner", "admin", "member", "viewer"],
+    description:
+      "Owner-scoped team records and pending invitations. Pending records do not send email or grant access.",
+    actions: ["create", "get", "invite", "remove"],
   });
 }

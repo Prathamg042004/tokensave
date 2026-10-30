@@ -42,3 +42,17 @@ Validation includes Redis failure, malformed counters, 61 requests with changing
 ## Connected database review
 
 The connected TokenSave Supabase project uses Auth and had no application tables in public or sellerbot schemas at review. Supabase's security advisor reported only disabled leaked-password protection. This feature requires an eligible paid plan; no plan upgrade was purchased. Redis data authorization remains an application responsibility.
+
+## API contracts and code quality follow-up
+
+- Verified accounts and anonymous BYOK requests use separate cache namespaces, even when they share a provider credential.
+- Every POST route reads a byte-bounded JSON object. Shared validators reject invalid roles, message shapes, budgets, provider credentials and options before external provider calls. Unsupported generation options are rejected explicitly.
+- Context operations enforce their documented character-based estimate budget and return 422 when preserved content cannot fit. This is not a tokenizer guarantee. Conversation excerpts remain untrusted user messages, never elevated system instructions.
+- Batch input is fully validated before any provider call. A 45-second shared cancellation deadline bounds provider processing; each result reports success/error accurately. Provider calls share the local account limiter and reject redirects.
+- Provider HTTP errors, invalid JSON, malformed completions and network failures use sanitized responses. No raw provider/auth/Redis messages are sent to clients. Account APIs and middleware use no-store responses.
+- Public BYOK CORS uses `*` without cookie credentials, rather than reflecting arbitrary origins. Baseline CSP restricts embedding, base URLs, objects and form actions; it is not a complete script nonce policy.
+- Provider keys are held only in page memory. Old `ts_keys_*` browser entries are purged; error-triggered session replay is disabled. Supabase session storage remains managed by its auth client.
+- Team creation and edits use atomic Redis creation and compare-and-swap. Duplicate invitations and removal of the owner are rejected; stale edits return 409. Invitations remain pending records, not email delivery or a membership acceptance flow.
+- Repository lint runs without exceptions for explicit any or React hook violations, and CI requires zero lint warnings. Operational Redis aggregates remain best effort and are not an invoice ledger.
+
+Regression coverage includes malformed auth responses, provider errors and fallback, corrupt caches, byte limits, batch prevalidation, context role/budget preservation, browser credential cleanup, middleware rejection headers, and concurrent Redis team operations. Production Supabase policies/settings, provider model availability and paid invoice reconciliation remain outside these repository-only checks.

@@ -19,7 +19,7 @@ const message = {
   required: ["role", "content"],
   properties: {
     role: { type: "string", enum: ["user", "assistant", "system"] },
-    content: { type: "string", minLength: 1, maxLength: 100000 },
+    content: { type: "string", minLength: 1, maxLength: 100000, pattern: "\\S" },
   },
   additionalProperties: false,
 };
@@ -38,6 +38,7 @@ const schemas = {
         type: "string",
         minLength: 10,
         maxLength: 500,
+        pattern: "^[!-~]{10,500}$",
         writeOnly: true,
       },
       messages: {
@@ -48,6 +49,8 @@ const schemas = {
       },
       tsKey: {
         type: "string",
+        minLength: 1,
+        maxLength: 100,
         description:
           "Validated TokenSave credential for account attribution and rate limiting.",
       },
@@ -67,7 +70,7 @@ const schemas = {
         type: "object",
         additionalProperties: { type: "string" },
         description:
-          "First 20 entries considered; key/value truncation applies.",
+          "Up to 20 non-empty string values; key/value lengths are validated.",
       },
       userId: {
         type: "string",
@@ -200,13 +203,14 @@ const schemas = {
     type: "object",
     required: ["messages"],
     properties: {
-      messages: { type: "array", items: ref("Message") },
+      messages: { type: "array", minItems: 1, maxItems: 100, items: ref("Message") },
       maxTokens: {
         type: "integer",
         minimum: 1,
+        maximum: 1000000,
         default: 4000,
         description:
-          "Recommended input constraint; not enforced by current route. Target is not a hard ceiling.",
+          "Enforced character-estimate budget; preserved content that cannot fit returns 422.",
       },
     },
   },
@@ -239,12 +243,12 @@ const schemas = {
     type: "object",
     required: ["messages"],
     properties: {
-      messages: { type: "array", minItems: 1, items: ref("Message") },
-      maxTokens: { type: "integer", minimum: 1, default: 4000 },
-      keepRecent: { type: "integer", minimum: 1, default: 6 },
+      messages: { type: "array", minItems: 1, maxItems: 100, items: ref("Message") },
+      maxTokens: { type: "integer", minimum: 1, maximum: 1000000, default: 4000 },
+      keepRecent: { type: "integer", minimum: 1, maximum: 100, default: 6 },
     },
     description:
-      "Positive integer limits are recommended client constraints, not runtime-enforced bounds.",
+      "Positive integer limits are enforced. Preserved content that cannot fit returns 422.",
   },
   SmartResponse: {
     type: "object",
@@ -271,7 +275,7 @@ const schemas = {
           "percent_saved",
         ].map((k) => [k, { type: "number" }]),
       ),
-      messages: { type: "array", items: ref("Message") },
+      messages: { type: "array", minItems: 1, maxItems: 100, items: ref("Message") },
     },
     additionalProperties: true,
   },
@@ -353,13 +357,18 @@ for (const endpoint of endpoints) {
       },
     };
   if (method === "post")
-    for (const status of [400, 413, 429, 500])
+    for (const status of [400, 401, 413, 422, 429, 500, 502, 503, 504])
       operation.responses[status] = {
         description: {
           400: "Invalid request",
-          413: "Declared body too large",
+          401: "Invalid account or provider credential",
+          413: "Request body exceeds the streamed byte limit",
+          422: "Preserved content exceeds the estimated context budget",
+          502: "Invalid provider response or connection failure",
+          503: "Authentication or storage unavailable",
+          504: "Provider deadline or cancellation",
           429: "Proxy or provider rate/quota limit",
-          500: "Parsing or unexpected failure",
+          500: "Unexpected internal failure",
         }[status],
         content: { "application/json": { schema: ref("Error") } },
       };
@@ -389,12 +398,12 @@ for (const endpoint of endpoints) {
       "Retry-After": {
         schema: { type: "integer" },
         description:
-          "60 seconds for the proxy limiter; upstream failures may omit it.",
+          "Remaining Redis window lifetime for the proxy limiter; upstream failures may omit it.",
       },
     };
     operation.responses.default = {
       description:
-        "Other upstream HTTP errors can be forwarded; shape is provider-dependent.",
+        "Other upstream HTTP statuses may be forwarded with a sanitized error object.",
       content: { "application/json": { schema: ref("Error") } },
     };
   }
@@ -408,7 +417,7 @@ const output =
         title: "TokenSave integration API",
         version: "3.1.0",
         description:
-          "Custom non-streaming text API. This contract documents recommended inputs and current response shapes, not a production assurance. No verified authentication scheme is supplied by tsKey. Native provider responses vary; cache isolation needs review. Synthetic-data evaluation is recommended. Dashboard management routes are intentionally outside this integration contract.",
+          "Custom non-streaming text API. This contract documents recommended inputs and current response shapes, not a production assurance. An optional validated tsKey attributes usage to an account. Native provider success responses vary. Credential-isolated caching is scoped by provider, resolved model, quality and messages. Synthetic-data evaluation is recommended. Dashboard management routes are intentionally outside this integration contract.",
       },
       servers: [{ url: API_BASE }],
       security: [],
