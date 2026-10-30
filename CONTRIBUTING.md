@@ -34,12 +34,10 @@ npm run build
 ```
 
 CI runs the same commands on every pull request. Typecheck, tests (Node 20 and
-22), the production build and the gitleaks secret scan are required; lint is
-still advisory until the existing violations are fixed.
+22), ESLint with zero warnings, the production build, Redis integration and the gitleaks secret scan are required.
 
 Tests live in `tests/` and use the built-in Node test runner, so there is no
-extra tooling to install. Coverage is thin today - the SDK helpers, the pricing
-table and the workflow policy. New logic is expected to ship with a test, and
+extra tooling to install. Coverage includes API contracts/security, SDK behavior and loopback HTTP, accounting, UI interactions, workflow policy and isolated Redis integration. New logic is expected to ship with a test, and
 anything extracted out of the API route handlers should arrive with one.
 
 Pull request titles must follow Conventional Commits; a check enforces it.

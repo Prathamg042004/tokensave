@@ -143,7 +143,7 @@ TokenSave is pre-1.0 and maintained by one person. Being upfront about it:
 | Secret scanning (gitleaks) in CI | Required check |
 | CodeQL static analysis | Runs on every PR and weekly |
 | Supply chain (OpenSSF Scorecard, pinned actions, Dependabot) | Automated |
-| ESLint | Advisory, existing violations tracked in an open issue |
+| ESLint | Required CI gate, zero warnings |
 | Test coverage | SDK behavior, provider usage/cost accounting, mocked API routes, security helpers, UI interactions and workflow policy; live-provider invoice reconciliation remains unverified |
 | SDK on npm | Not yet, `sdk/` is source only |
 | Docker image and self-host guide | Not yet |

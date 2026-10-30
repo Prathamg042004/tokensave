@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### API correctness, security and code quality
+
+- Add shared bounded request validation, truthful batch statuses and deadlines, and strict estimated context budgets with explicit 422 responses.
+- Sanitize upstream errors, preserve cancellation, prevent summary privilege promotion, and strengthen private-response headers.
+- Protect team creation/edits against concurrent writes, validate pending invitations and prevent owner removal.
+- Remove provider credentials from persistent browser storage, clear legacy entries, disable error session replay and redact sensitive monitoring request envelopes.
+- Replace explicit any with typed boundaries, fix React hook/prop issues, and make repository-wide zero-warning lint mandatory in CI.
+
 ### SDK accounting follow-up
 
 - Isolate returned accounting metadata from cached records, including nested usage.

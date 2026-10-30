@@ -1,14 +1,19 @@
 ﻿"use client";
-import { useState, useRef, useEffect, useCallback, DragEvent } from "react";
+import { useState, useRef, useEffect, useCallback, DragEvent, ChangeEvent } from "react";
+import Link from "next/link";
+import type { TokenSaveMeta } from "../types";
 import { ProviderLogo } from "../icons";
 
-function extractText(r: any, p: string): string {
-  try {
-    if (r.error) { const m = typeof r.error === "string" ? r.error : r.error.message || JSON.stringify(r.error); if (m.toLowerCase().match(/quota|rate|limit|429/)) return "QUOTA"; if (m.toLowerCase().match(/invalid|unauthorized|401/)) return "AUTH"; return "ERR:" + m; }
-    if (p === "anthropic" && r.content?.[0]) return r.content[0].text;
-    if ((p === "openai" || p === "groq") && r.choices?.[0]) return r.choices[0].message.content;
-    if (p === "google" && r.candidates?.[0]) return r.candidates[0].content.parts[0].text;
-  } catch {} return "";
+type Meta = Partial<TokenSaveMeta>;
+type ClientResponse = {error?:string|{message?:string};tokensave_meta?:Meta;content?:{text?:string}[];choices?:{message:{content?:string}}[];candidates?:{content:{parts:{text?:string}[]}}[]};
+type RunResult = {text:string;meta?:Meta;dur?:number;inT?:number|null;outT?:number|null;without?:number|null;withC?:number|null;raw?:string};
+type ChatMessage = {role:"user"|"assistant";content:string;meta?:Meta};
+type Comparison = {name:string;text:string;model:string;cost:number|null;meta?:Meta};
+function extractText(r:ClientResponse,p:string):string {
+  if(r.error)return "ERR:Provider request failed.";
+  if(p==="anthropic")return r.content?.map(part=>part.text??"").join("")??"";
+  if(p==="google")return r.candidates?.[0]?.content?.parts?.map(part=>part.text??"").join("")??"";
+  return r.choices?.[0]?.message?.content??"";
 }
 
 const money = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? "$" + value.toFixed(6) : "Unavailable";
@@ -45,8 +50,8 @@ function DragDropZone({ onFile, fileName, onRemove }: { onFile: (name: string, c
     reader.onload = (ev) => { let t = ev.target?.result as string; if (t.length > 50000) t = t.slice(0, 50000); onFile(file.name, t); };
     reader.readAsText(file);
   }, [onFile]);
-  const handleInput = (e: any) => {
-    const file = e.target.files[0]; if (!file) return;
+  const handleInput = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; if (!file) return;
     const reader = new FileReader();
     reader.onload = (ev) => { let t = ev.target?.result as string; if (t.length > 50000) t = t.slice(0, 50000); onFile(file.name, t); };
     reader.readAsText(file);
@@ -84,18 +89,18 @@ export default function Playground() {
   const [apiKey, setApiKey] = useState("");
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<RunResult | null>(null);
   const [showRaw, setShowRaw] = useState(false);
   const [file, setFile] = useState("");
   const [fileName, setFileName] = useState("");
-  const [history, setHistory] = useState<any[]>([]);
-  const [chatMsgs, setChatMsgs] = useState<any[]>([]);
+  const [history, setHistory] = useState<{prompt:string;cached?:boolean;model:string;dur:number}[]>([]);
+  const [chatMsgs, setChatMsgs] = useState<ChatMessage[]>([]);
   const [chatIn, setChatIn] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const [cmp2, setCmp2] = useState("anthropic");
   const [cmpKey2, setCmpKey2] = useState("");
   const [cmpLoading, setCmpLoading] = useState(false);
-  const [cmpResult, setCmpResult] = useState<any>(null);
+  const [cmpResult, setCmpResult] = useState<{a:Comparison;b:Comparison} | null>(null);
   const chatEnd = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
 
@@ -110,7 +115,7 @@ export default function Playground() {
     const start = Date.now();
     try {
       const res = await fetch("/api/proxy", { method: "POST", signal: AbortSignal.timeout(60000), headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider, apiKey, messages: [{ role: "user", content: fullPrompt }] }) });
-      const data = await res.json();
+      const data:ClientResponse = await res.json();
       const dur = Date.now() - start;
       const text = extractText(data, provider);
       if (!res.ok) throw new Error("Provider request failed (HTTP " + res.status + ")");
@@ -120,7 +125,7 @@ export default function Playground() {
       const withC = data.tokensave_meta?.cost ?? null;
       setResult({ text, meta: data.tokensave_meta, dur, inT, outT, without, withC, raw: JSON.stringify(data, null, 2) });
       setHistory(h => [{ prompt: prompt.slice(0, 40), cached: data.tokensave_meta?.cache_hit, model, dur }, ...h].slice(0, 15));
-    } catch (e: any) { setResult({ text: "ERR:" + e.message }); }
+    } catch { setResult({ text: "ERR:Request could not complete. Check your provider key and connection." }); }
     setLoading(false); requestBusy.current = false;
   };
 
@@ -128,13 +133,14 @@ export default function Playground() {
     if (requestBusy.current || !apiKey.trim() || !chatIn.trim()) return;
     requestBusy.current = true; setRequestError("");
     const content = file ? chatIn + "\n\n--- " + fileName + " ---\n" + file : chatIn;
-    const msgs = [...chatMsgs, { role: "user", content }];
+    const msgs:ChatMessage[] = [...chatMsgs, { role: "user", content }];
     setChatMsgs(msgs); setChatIn(""); setChatLoading(true);
     try {
       const res = await fetch("/api/proxy", { method: "POST", signal: AbortSignal.timeout(60000), headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider, apiKey, messages: msgs.map(m => ({ role: m.role, content: m.content })) }) });
-      const data = await res.json();
+      const data:ClientResponse = await res.json();
+      if(!res.ok)throw new Error("Provider request failed");
       setChatMsgs([...msgs, { role: "assistant", content: extractText(data, provider), meta: data.tokensave_meta }]);
-    } catch (e: any) { setChatMsgs([...msgs, { role: "assistant", content: "Error: " + e.message }]); }
+    } catch { setChatMsgs([...msgs, { role: "assistant", content: "Request could not complete. Check your provider key and connection." }]); }
     setChatLoading(false); requestBusy.current = false;
   };
 
@@ -144,8 +150,8 @@ export default function Playground() {
     try {
     setCmpLoading(true); setCmpResult(null);
     const [r1, r2] = await Promise.all([
-      fetch("/api/proxy", { method: "POST", signal: AbortSignal.timeout(60000), headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider, apiKey, messages: [{ role: "user", content: fullPrompt }] }) }).then(r => r.json()),
-      fetch("/api/proxy", { method: "POST", signal: AbortSignal.timeout(60000), headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider: cmp2, apiKey: cmpKey2, messages: [{ role: "user", content: fullPrompt }] }) }).then(r => r.json()),
+      fetch("/api/proxy", { method: "POST", signal: AbortSignal.timeout(60000), headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider, apiKey, messages: [{ role: "user", content: fullPrompt }] }) }).then(async r => {if(!r.ok)throw new Error("Provider request failed");return await r.json() as ClientResponse;}),
+      fetch("/api/proxy", { method: "POST", signal: AbortSignal.timeout(60000), headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider: cmp2, apiKey: cmpKey2, messages: [{ role: "user", content: fullPrompt }] }) }).then(async r => {if(!r.ok)throw new Error("Provider request failed");return await r.json() as ClientResponse;}),
     ]);
     if (r1.error || r2.error) throw new Error("Provider request failed");
     const t1 = extractText(r1, provider), t2 = extractText(r2, cmp2);
@@ -169,10 +175,10 @@ export default function Playground() {
 
       <nav className="sticky top-0 z-50 bg-[#0A0D12]/70 backdrop-blur-2xl border-b border-white/[0.04]">
         <div className="flex justify-between items-center px-6 lg:px-12 py-3.5 max-w-[1300px] mx-auto">
-          <a href="/" className="flex items-center gap-2.5">
+          <Link href="/" className="flex items-center gap-2.5">
             <div className="w-8 h-8 bg-gradient-to-br from-[#5B8DEF] to-[#A78BFA] rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-[#5B8DEF]/20">TS</div>
             <span className="text-[17px] font-semibold tracking-tight">TokenSave</span>
-          </a>
+          </Link>
           <div className="flex items-center gap-4">
             <a href="/docs" className="text-[13px] text-[#5A6577] hover:text-white transition-colors hidden sm:block">Docs</a>
             <a href="/dashboard" className="text-[13px] text-[#5A6577] hover:text-white transition-colors">Dashboard</a>

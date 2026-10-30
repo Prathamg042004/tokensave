@@ -1,5 +1,8 @@
 "use client";
-import { useState, useEffect, useRef, useId, ReactNode } from "react";
+import { useState, useEffect, useRef, useId, useCallback, ReactNode } from "react";
+import Link from "next/link";
+import type { User } from "@supabase/supabase-js";
+import type { StatsResponse, Provider } from "../types";
 import { supabase } from "../supabase";
 import { useRouter } from "next/navigation";
 import { ProviderLogo } from "../icons";
@@ -24,15 +27,15 @@ function CountUp({ end, prefix = "", suffix = "", decimals = 0 }: { end: number;
 function AreaChart({ data, labels, color, height = 120 }: { data: number[]; labels?: string[]; color: string; height?: number }) {
   const [hover, setHover] = useState<number | null>(null);
   const chartId = useId();
-  if (data.length === 0) data = [0, 0, 0, 0, 0, 0, 0];
-  const max = Math.max(...data, 1);
+  const values = data.length ? data : [0, 0, 0, 0, 0, 0, 0];
+  const max = Math.max(...values, 1);
   const w = 300; const pad = 30;
-  const pts = data.map((v, i) => ({ x: pad + (i / (Math.max(data.length - 1, 1))) * (w - pad * 2), y: 10 + (height - 30) - (v / max) * (height - 40) }));
+  const pts = values.map((v, i) => ({ x: pad + (i / (Math.max(values.length - 1, 1))) * (w - pad * 2), y: 10 + (height - 30) - (v / max) * (height - 40) }));
   const line = pts.map(p => `${p.x},${p.y}`).join(" ");
   const area = `${pad},${height - 20} ${line} ${w - pad},${height - 20}`;
 
   return (
-    <svg role="img" aria-label={"Daily values: " + data.map((v, i) => (labels?.[i] || "Day " + (i + 1)) + ": " + v).join(", ")} viewBox={`0 0 ${w} ${height}`} className="w-full" style={{ height }} onMouseLeave={() => setHover(null)}>
+    <svg role="img" aria-label={"Daily values: " + values.map((v, i) => (labels?.[i] || "Day " + (i + 1)) + ": " + v).join(", ")} viewBox={`0 0 ${w} ${height}`} className="w-full" style={{ height }} onMouseLeave={() => setHover(null)}>
       <defs>
         <linearGradient id={chartId} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor={color} stopOpacity="0.3" /><stop offset="100%" stopColor={color} stopOpacity="0" />
@@ -53,7 +56,7 @@ function AreaChart({ data, labels, color, height = 120 }: { data: number[]; labe
             <line x1={p.x} y1={10} x2={p.x} y2={height - 20} stroke={color} strokeWidth="1" opacity="0.3" strokeDasharray="3,3" />
             <circle cx={p.x} cy={p.y} r={5} fill={color} stroke="#0A0D12" strokeWidth="2" />
             <rect x={p.x - 25} y={p.y - 28} width={50} height={20} rx={5} fill="#1a1f2e" stroke={color} strokeWidth="0.5" />
-            <text x={p.x} y={p.y - 15} textAnchor="middle" fill="white" fontSize="10" fontWeight="600" fontFamily="system-ui">{data[i]}</text>
+            <text x={p.x} y={p.y - 15} textAnchor="middle" fill="white" fontSize="10" fontWeight="600" fontFamily="system-ui">{values[i]}</text>
           </>}
         </g>
       ))}
@@ -92,7 +95,7 @@ function KeyManager({ userId, email }: { userId: string; email: string }) {
       <div className="flex gap-2">
         <div className="flex-1 bg-[#0A0D12] border border-white/[0.10] rounded-xl px-4 py-3 font-mono text-[#bba6ed] text-[13px] truncate">{show ? key : key.slice(0, 12) + "•".repeat(16) + key.slice(-4)}</div>
         <button onClick={() => setShow(!show)} className="px-3 py-2 bg-white/[0.03] hover:bg-white/[0.06] rounded-xl text-[12px] text-[#a9b5c8] transition-colors">{show ? "Hide" : "Show"}</button>
-        <button onClick={() => { navigator.clipboard.writeText(key); setCopied(true); setTimeout(() => setCopied(false), 1500); }} className="px-3 py-2 bg-white/[0.03] hover:bg-white/[0.06] rounded-xl text-[12px] text-[#a9b5c8] transition-colors">{copied ? "✓" : "Copy"}</button>
+        <button onClick={() => { navigator.clipboard.writeText(key).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),1500);}).catch(()=>setMsg("Copy failed. Use Show and copy the key manually.")); }} className="px-3 py-2 bg-white/[0.03] hover:bg-white/[0.06] rounded-xl text-[12px] text-[#a9b5c8] transition-colors">{copied ? "✓" : "Copy"}</button>
       </div>
       <div className="flex justify-between mt-2">
         <span className="text-[12px] text-[#94a2b9]">Include as <code className="text-[#a9b5c8]">tsKey</code> in requests</span>
@@ -112,14 +115,13 @@ const PROVIDERS = [
 ];
 
 export default function Dashboard() {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<StatsResponse | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [tab, setTab] = useState("overview");
   const [savedKeys, setSavedKeys] = useState({ anthropic: "", openai: "", google: "", groq: "" });
-  const [keyMsg, setKeyMsg] = useState("");
   const [logSearch, setLogSearch] = useState("");
   const [logFilter, setLogFilter] = useState("all");
   const [budgetLimit, setBudgetLimit] = useState(1000);
@@ -132,24 +134,9 @@ export default function Dashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const statsBusy = useRef(false);
   const router = useRouter();
-  const proxy = "https://tokensave.vercel.app/api/proxy";
+  const proxy = "https://tokensave.in/api/proxy";
 
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (data.user) {
-        setUser(data.user);
-        try { const k = localStorage.getItem("ts_keys_" + data.user.id); if (k) setSavedKeys(JSON.parse(k)); } catch {}
-        try { const b = localStorage.getItem("ts_budget_" + data.user.id); if (b) { const p = JSON.parse(b); setBudgetLimit(p.limit || 1000); setBudgetAlert(p.alertPercent || 80); } } catch {}
-        try { const r = localStorage.getItem("ts_routing_" + data.user.id); if (r) setRoutingRules(JSON.parse(r)); } catch {}
-      } else router.push("/login");
-      setLoading(false);
-    });
-    fetchStats();
-    const i = setInterval(fetchStats, 15000);
-    return () => clearInterval(i);
-  }, [router]);
-
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     if (statsBusy.current) return;
     statsBusy.current = true; setRefreshing(true);
     try {
@@ -160,7 +147,24 @@ export default function Dashboard() {
       setStats(result); setStatsError(""); setLastUpdated(new Date().toLocaleTimeString());
     } catch { setStatsError("Unable to refresh statistics. Previously loaded data may be out of date."); }
     finally { setStatsLoading(false); setRefreshing(false); statsBusy.current = false; }
-  };
+  }, []);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user) {
+        setUser(data.user);
+        void fetchStats();
+        try { for (const key of Object.keys(localStorage)) if (key.startsWith("ts_keys_")) localStorage.removeItem(key); } catch {}
+        try { const b = localStorage.getItem("ts_budget_" + data.user.id); if (b) { const p = JSON.parse(b); setBudgetLimit(p.limit || 1000); setBudgetAlert(p.alertPercent || 80); } } catch {}
+        try { const r = localStorage.getItem("ts_routing_" + data.user.id); if (r) setRoutingRules(JSON.parse(r)); } catch {}
+      } else router.push("/login");
+      setLoading(false);
+    }).catch(()=>{router.replace("/login");});
+    const i = setInterval(fetchStats, 15000);
+    return () => clearInterval(i);
+  }, [router, fetchStats]);
+
+
 
   if (loading) return (
     <div className="min-h-screen bg-[#0A0D12] flex flex-col items-center justify-center gap-4">
@@ -170,17 +174,16 @@ export default function Dashboard() {
     </div>
   );
 
-  const t = stats?.totals || { total_requests: 0, tokens_saved: 0, cache_hits: 0, errors: 0, total_cost: 0, total_saved: 0 };
+  const t = stats?.totals || { total_requests: 0, tokens_saved: 0, cache_hits: 0, errors: 0, total_cost: 0, total_saved: 0, unknown_cost_requests: 0 };
   const days = stats?.days || [];
-  const perf = stats?.performance || {};
   const todayRequests = days.length ? days[days.length - 1].total_requests : 0;
   const errorRate = t.total_requests > 0 ? Math.round(((t.errors || 0) / t.total_requests) * 100) : 0;
-  const reqData = days.map((d: any) => d.total_requests);
-  const savedData = days.map((d: any) => d.tokens_saved);
-  const dayLabels = days.map((d: any) => d.label);
+  const reqData = days.map((d) => d.total_requests);
+  const savedData = days.map((d) => d.tokens_saved);
+  const dayLabels = days.map((d) => d.label);
   const hasData = t.total_requests > 0;
 
-  const filteredLogs = (stats?.recent_logs || []).filter((l: any) => {
+  const filteredLogs = (stats?.recent_logs || []).filter((l) => {
     const s = !logSearch || JSON.stringify(l).toLowerCase().includes(logSearch.toLowerCase());
     const f = logFilter === "all" || (logFilter === "cached" && l.cache_hit) || (logFilter === "not_cached" && !l.cache_hit) || logFilter === l.provider;
     return s && f;
@@ -251,7 +254,7 @@ export default function Dashboard() {
       `}</style>
       <a href="#dashboard-content" className="sr-only focus:not-sr-only">Skip to dashboard</a>
       <aside className="dash-sidebar">
-        <a className="dash-brand" href="/" aria-label="TokenSave home"><span className="dash-logo" aria-hidden="true">≋</span>TokenSave.</a>
+        <Link className="dash-brand" href="/" aria-label="TokenSave home"><span className="dash-logo" aria-hidden="true">≋</span>TokenSave.</Link>
         <span className="dash-eyebrow" style={{paddingLeft:14}}>Workspace</span>
         <nav aria-label="Dashboard sections">
           {[{id:"overview",l:"Overview",i:"◫"},{id:"keys",l:"API keys",i:"⌘"},{id:"logs",l:"Request logs",i:"≡"},{id:"routing",l:"Routing",i:"⇄"},{id:"settings",l:"Settings",i:"⚙"}].map(item=><button key={item.id} aria-pressed={tab===item.id} aria-controls="dashboard-content" onClick={()=>setTab(item.id)}><span className="dash-nav-icon" aria-hidden="true">{item.i}</span>{item.l}</button>)}
@@ -259,15 +262,15 @@ export default function Dashboard() {
         <div className="dash-side-bottom"><span className="dash-eyebrow">Build with TokenSave</span><a href="/playground">Playground ↗</a><a href="/docs">Documentation ↗</a><a href="/security">Security &amp; data handling</a></div>
       </aside>
       <div className="dash-main">
-      <header className="dash-topbar"><span>Workspace <span style={{margin:"0 10px",color:"#526078"}}>/</span> Dashboard</span><div className="dash-account"><span>{user?.email}</span><button onClick={async()=>{await supabase.auth.signOut();router.push("/login");}}>Log out ↗</button></div></header>
+      <header className="dash-topbar"><span>Workspace <span style={{margin:"0 10px",color:"#526078"}}>/</span> Dashboard</span><div className="dash-account"><span>{user?.email}</span><button onClick={async()=>{setSavedKeys({anthropic:"",openai:"",google:"",groq:""});await supabase.auth.signOut();router.push("/login");}}>Log out ↗</button></div></header>
       <main id="dashboard-content" className="dash-content">
         <div className="dash-heading"><div><span className="dash-eyebrow">AI operations</span><h1>{({overview:"Workspace overview",keys:"API keys",logs:"Request logs",routing:"Model routing",settings:"Workspace settings"} as Record<string, string>)[tab]}</h1><p>{({overview:"Understand traffic. Inspect savings. Make your next request count.",keys:"Manage your integration credentials in one place.",logs:"Inspect the latest requests recorded by the service.",routing:"Review model preferences for simple and complex prompts.",settings:"Your account and local workspace preferences."} as Record<string, string>)[tab]}</p></div><div className="dash-actions"><button className="dash-secondary" disabled={refreshing} onClick={fetchStats}>{refreshing?"Refreshing…":"↻ Refresh data"}</button><a className="dash-primary" href="/playground">Open playground ↗</a></div></div>
         {statsError && <div className="dash-notice" role="alert">{statsError} <button onClick={fetchStats} disabled={refreshing}>Try again</button></div>}
-        <div className="dash-scope"><span><strong>Service-wide activity</strong> · {tab === "logs" ? "Latest 50 recorded requests" : "Last 7 days"} · Not account-specific</span><span>{lastUpdated?"Updated "+lastUpdated:"Waiting for statistics"} · Refreshes every 15s</span></div>
-        {budgetLimit>0 && todayRequests>=budgetLimit*(budgetAlert/100) && <div className="dash-notice">Daily request reminder: {todayRequests.toLocaleString()} / {budgetLimit.toLocaleString()} service-wide requests. This is a local reminder, not a spending cap.</div>}
+        <div className="dash-scope"><span><strong>Your account activity</strong> · {tab === "logs" ? "Latest 50 recorded requests" : "Last 7 days"} · Verified account only</span><span>{lastUpdated?"Updated "+lastUpdated:"Waiting for statistics"} · Refreshes every 15s</span></div>
+        {budgetLimit>0 && todayRequests>=budgetLimit*(budgetAlert/100) && <div className="dash-notice">Daily request reminder: {todayRequests.toLocaleString()} / {budgetLimit.toLocaleString()} account requests. This is a local reminder, not a spending cap.</div>}
         {tab === "overview" && (
           <div className="space-y-6">
-            <section className="dash-setup" aria-label="Integration quick start"><div><span className="dash-eyebrow">Build your first integration</span><h2>From API key to first request.</h2><p>Connect a provider, try a prompt and inspect the response. Service-wide charts below are separate from your setup progress.</p><div className="dash-actions"><button className="dash-primary" onClick={()=>setTab("keys")}>Manage API keys →</button><a className="dash-secondary" href="/docs">Integration guide</a></div></div><div className="dash-steps"><div className="dash-step"><b>01</b>Choose your provider and API key</div><div className="dash-step"><b>02</b>Send a request in the playground</div><div className="dash-step"><b>03</b>Inspect routing and token estimates</div></div></section>
+            <section className="dash-setup" aria-label="Integration quick start"><div><span className="dash-eyebrow">Build your first integration</span><h2>From API key to first request.</h2><p>Connect a provider, try a prompt and inspect the response. The charts below show requests attributed to your verified account.</p><div className="dash-actions"><button className="dash-primary" onClick={()=>setTab("keys")}>Manage API keys →</button><a className="dash-secondary" href="/docs">Integration guide</a></div></div><div className="dash-steps"><div className="dash-step"><b>01</b>Choose your provider and API key</div><div className="dash-step"><b>02</b>Send a request in the playground</div><div className="dash-step"><b>03</b>Inspect routing and token estimates</div></div></section>
             <p className="text-[12px] text-[#a9b5c8] mb-3">Published-rate USD estimates for known costs only. {t.unknown_cost_requests || 0} requests have unavailable cost. Savings cover cache repeats; routing savings are unmeasured. Older estimates are excluded.</p>
             <div className="metric-grid grid grid-cols-2 lg:grid-cols-5 gap-3">
               {[
@@ -352,19 +355,19 @@ export default function Dashboard() {
             <FadeUp><div className="bg-[#121a27] border border-white/[0.10] rounded-2xl p-6">
               <h2 className="text-[15px] font-semibold font-display mb-1">TokenSave API Key</h2>
               <p className="text-[12px] text-[#a9b5c8] mb-4">Your TokenSave credential for requests that accept a tsKey. Keep it private.</p>
-              <KeyManager userId={user?.id} email={user?.email} />
+              <KeyManager userId={user?.id || ""} email={user?.email || ""} />
             </div></FadeUp>
             <FadeUp delay={0.1}><div className="bg-[#121a27] border border-white/[0.10] rounded-2xl p-6">
               <h2 className="text-[15px] font-semibold font-display mb-1">Provider Keys</h2>
-              <p className="text-[12px] text-[#a9b5c8] mb-5">Saved locally in this browser. Keys used for proxy requests pass through TokenSave to your provider. Avoid saving credentials on shared devices.</p>
+              <p className="text-[12px] text-[#a9b5c8] mb-5">Provider keys stay in memory for this page only and are cleared on reload. Proxy requests pass through TokenSave to your provider. Previously saved provider keys are removed from browser storage.</p>
               <div className="space-y-3">
                 {PROVIDERS.map(p => (
                   <div key={p.id}>
                     <label className="flex items-center gap-2 text-[12px] text-[#a9b5c8] mb-1.5"><ProviderLogo provider={p.id} size={16} />{p.name}</label>
-                    <input aria-label={p.name + " API key"} autoComplete="off" type="password" placeholder={p.id === "anthropic" ? "sk-ant-..." : p.id === "openai" ? "sk-..." : p.id === "google" ? "AIza..." : "gsk_..."} value={(savedKeys as any)[p.id]} onChange={e => setSavedKeys({ ...savedKeys, [p.id]: e.target.value })} className="w-full px-4 py-3 bg-[#0A0D12] border border-white/[0.10] rounded-xl text-[13px] text-[#E8ECF4] placeholder-[#94a2b9] font-mono focus:outline-none focus:border-[#bba6ed]/30 transition-colors" />
+                    <input aria-label={p.name + " API key"} autoComplete="off" type="password" placeholder={p.id === "anthropic" ? "sk-ant-..." : p.id === "openai" ? "sk-..." : p.id === "google" ? "AIza..." : "gsk_..."} value={savedKeys[p.id as Provider]} onChange={e => setSavedKeys({ ...savedKeys, [p.id]: e.target.value })} className="w-full px-4 py-3 bg-[#0A0D12] border border-white/[0.10] rounded-xl text-[13px] text-[#E8ECF4] placeholder-[#94a2b9] font-mono focus:outline-none focus:border-[#bba6ed]/30 transition-colors" />
                   </div>
                 ))}
-                <button onClick={() => { if (user) { localStorage.setItem("ts_keys_" + user.id, JSON.stringify(savedKeys)); setKeyMsg("Saved!"); setTimeout(() => setKeyMsg(""), 1500); } }} className="px-5 py-2.5 bg-gradient-to-r from-[#bba6ed] to-[#A78BFA] text-[#211a36] rounded-xl text-[13px] font-semibold hover:opacity-90 shadow-lg shadow-[#bba6ed]/20">{keyMsg || "Save Keys"}</button>
+                <button onClick={() => { setSavedKeys({anthropic:"",openai:"",google:"",groq:""}); }} className="px-5 py-2.5 bg-gradient-to-r from-[#bba6ed] to-[#A78BFA] text-[#211a36] rounded-xl text-[13px] font-semibold hover:opacity-90 shadow-lg shadow-[#bba6ed]/20">Clear provider keys</button>
               </div>
             </div></FadeUp>
           </div>
@@ -380,7 +383,7 @@ export default function Dashboard() {
             <FadeUp delay={0.1}><div className="bg-[#121a27] border border-white/[0.10] rounded-2xl overflow-hidden">
               {filteredLogs.length > 0 ? (
                 <div className="overflow-x-auto"><table className="w-full min-w-[650px]"><thead><tr className="text-[12px] text-[#a9b5c8] uppercase tracking-wider text-left border-b border-white/[0.04]"><th className="px-5 py-3">Time</th><th className="px-5 py-3">Provider</th><th className="px-5 py-3">Model</th><th className="px-5 py-3">Cache</th><th className="px-5 py-3">Saved</th><th className="px-5 py-3">Complexity</th></tr></thead>
-                <tbody>{filteredLogs.map((l: any, i: number) => (
+                <tbody>{filteredLogs.map((l, i: number) => (
                   <tr key={i} className="border-b border-white/[0.02] hover:bg-white/[0.015] transition-colors">
                     <td className="px-5 py-3 text-[12px] text-[#94a2b9]">{l.timestamp ? new Date(l.timestamp).toLocaleString() : "—"}</td>
                     <td className="px-5 py-3 text-[13px] text-[#7A8599] capitalize">{l.provider || "—"}</td>
@@ -417,8 +420,8 @@ export default function Dashboard() {
                   <div key={p.l} className="bg-[#0A0D12] border border-white/[0.04] rounded-xl p-4">
                     <div className="flex items-center gap-2 mb-3"><ProviderLogo provider={p.p} size={18} /><p className="text-[13px] font-medium">{p.l}</p></div>
                     <div className="routing-grid grid grid-cols-2 gap-3">
-                      <div><label className="text-[12px] text-[#94a2b9] block mb-1">Simple</label><select aria-label={p.l + " simple model"} value={(routingRules as any)[p.s]} onChange={e => setRoutingRules({ ...routingRules, [p.s]: e.target.value })} className="w-full px-3 py-2 bg-[#12161E] border border-white/[0.10] rounded-lg text-[#4ADE80] text-[12px] font-mono focus:outline-none">{p.m.map(m => <option key={m} value={m}>{m}</option>)}</select></div>
-                      <div><label className="text-[12px] text-[#94a2b9] block mb-1">Complex</label><select aria-label={p.l + " complex model"} value={(routingRules as any)[p.c]} onChange={e => setRoutingRules({ ...routingRules, [p.c]: e.target.value })} className="w-full px-3 py-2 bg-[#12161E] border border-white/[0.10] rounded-lg text-[#bba6ed] text-[12px] font-mono focus:outline-none">{p.m.map(m => <option key={m} value={m}>{m}</option>)}</select></div>
+                      <div><label className="text-[12px] text-[#94a2b9] block mb-1">Simple</label><select aria-label={p.l + " simple model"} value={routingRules[p.s as keyof typeof routingRules]} onChange={e => setRoutingRules({ ...routingRules, [p.s]: e.target.value })} className="w-full px-3 py-2 bg-[#12161E] border border-white/[0.10] rounded-lg text-[#4ADE80] text-[12px] font-mono focus:outline-none">{p.m.map(m => <option key={m} value={m}>{m}</option>)}</select></div>
+                      <div><label className="text-[12px] text-[#94a2b9] block mb-1">Complex</label><select aria-label={p.l + " complex model"} value={routingRules[p.c as keyof typeof routingRules]} onChange={e => setRoutingRules({ ...routingRules, [p.c]: e.target.value })} className="w-full px-3 py-2 bg-[#12161E] border border-white/[0.10] rounded-lg text-[#bba6ed] text-[12px] font-mono focus:outline-none">{p.m.map(m => <option key={m} value={m}>{m}</option>)}</select></div>
                     </div>
                   </div>
                 ))}
@@ -441,7 +444,7 @@ export default function Dashboard() {
             </div></FadeUp>
             <FadeUp delay={0.1}><div className="bg-[#121a27] border border-white/[0.10] rounded-2xl p-6">
               <h2 className="text-[15px] font-semibold font-display mb-1">Daily request reminder</h2>
-              <p className="text-[12px] text-[#a9b5c8] mb-4">A local reminder based on today’s service-wide request count. It does not enforce limits or send email alerts.</p>
+              <p className="text-[12px] text-[#a9b5c8] mb-4">A local reminder based on today’s account request count. It does not enforce limits or send email alerts.</p>
               <div className="space-y-3">
                 <div><label className="text-[12px] text-[#a9b5c8] block mb-1.5">Daily requests threshold</label><input aria-label="Daily request reminder threshold" min={1} type="number" value={budgetLimit} onChange={e => setBudgetLimit(Number(e.target.value))} className="w-full px-4 py-2.5 bg-[#0A0D12] border border-white/[0.10] rounded-xl text-[13px] text-[#E8ECF4] focus:outline-none focus:border-[#bba6ed]/30" /></div>
                 <div><label className="text-[12px] text-[#a9b5c8] block mb-1.5">Alert at</label><select aria-label="Reminder percentage" value={budgetAlert} onChange={e => setBudgetAlert(Number(e.target.value))} className="w-full px-4 py-2.5 bg-[#0A0D12] border border-white/[0.10] rounded-xl text-[13px] text-[#E8ECF4]"><option value={50}>50%</option><option value={75}>75%</option><option value={80}>80%</option><option value={90}>90%</option></select></div>

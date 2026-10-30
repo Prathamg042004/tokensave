@@ -4,7 +4,7 @@ export const proxyFields = [
   [
     "messages",
     "array · required",
-    "1–100 messages. Each needs role (user, assistant or system) and non-empty string content, at most 100,000 characters per message. Provider-specific role restrictions still apply.",
+    "1–100 messages. Each needs role (user, assistant or system) and non-empty string content, at most 100,000 characters per message. At least one non-system message is required. Unsupported stream/tools/temperature/max_tokens/maxTokens parameters return 400.",
   ],
   [
     "apiKey",
@@ -39,7 +39,7 @@ export const proxyFields = [
   [
     "tags",
     "object · optional",
-    "String values only. First 20 entries considered; keys truncated to 50 and values to 200 characters. Recorded in metadata; avoid private information.",
+    "Up to 20 non-empty string values, names up to 50 and values up to 200 characters. Invalid tags return 400. Avoid private information.",
   ],
   [
     "userId",
@@ -178,7 +178,7 @@ export const endpoints: Endpoint[] = [
     path: "/api/batch",
     title: "Process a batch",
     description:
-      "Processes prompts sequentially through the proxy. This is a synchronous response, not a background job or a provider Batch API discount.",
+      "Validates the whole batch before provider calls, then processes sequentially through the local proxy with a shared 45-second deadline. This is not a provider Batch API discount.",
     fields: [
       [
         "prompts",
@@ -220,7 +220,7 @@ export const endpoints: Endpoint[] = [
       2,
     ),
     caveat:
-      "Inspect every response.error and response.tokensave_meta.is_error: the current batch handler can label an upstream HTTP error as success. tsKey, model, quality, tags and fallbackKeys are not forwarded. It currently calls the legacy tokensave.vercel.app proxy host; evaluate this limitation before adopting batch.",
+      "Inspect each result status. All prompts are validated first. tsKey, model, quality, tags and fallbackKeys are forwarded locally. Unprocessed items are marked error when the deadline expires.",
   },
   {
     id: "trim-context",
@@ -269,7 +269,7 @@ export const endpoints: Endpoint[] = [
       2,
     ),
     caveat:
-      "A target, not a strict token ceiling: retained system/final messages may already exceed it. Counts are estimates, not a model tokenizer. Recheck output before sending it onward.",
+      "Enforces the character-based estimate ceiling. Returns 422 if preserved system/latest conversation messages exceed it. Counts are estimates, not a model tokenizer; recheck with your provider. Original message order is preserved.",
   },
   {
     id: "smart-context",
@@ -277,7 +277,7 @@ export const endpoints: Endpoint[] = [
     path: "/api/smart-context",
     title: "Summarize older messages",
     description:
-      "Uses deterministic text extraction, not an LLM: collects recent topic snippets, decision phrases and a small code block from older messages. Keeps system messages and recent conversation turns.",
+      "Uses heuristic excerpts, not an LLM. Preserves system messages and requested recent turns; inserts a summary as untrusted user content only when it fits the estimated budget. Otherwise trims older content.",
     fields: [
       [
         "messages",
@@ -318,7 +318,7 @@ export const endpoints: Endpoint[] = [
       2,
     ),
     caveat:
-      "On optimization returns optimized:true, original_messages, optimized_messages, messages_summarized, messages_kept, token estimates, percent_saved and messages. Summary may lose details, exceed the target or even increase tokens. No fixed savings or quality guarantee.",
+      "Returns 422 when preserved content cannot fit. Successful output never exceeds the character-estimated budget or increases estimated tokens. details_may_be_lost identifies discarded history; summary_used identifies excerpts. This is not a provider-token or quality guarantee.",
   },
   {
     id: "health",

@@ -2,7 +2,7 @@ name: CI
 
 # Gates on every push to main and every pull request.
 #   required -> typecheck, test (Node 20 + 22), build, secret-scan
-#   advisory -> lint (issue #5), dependency review comment
+#   advisory -> dependency review comment
 on:
   push:
     branches: [main]
@@ -39,12 +39,9 @@ jobs:
       - run: npm run typecheck
 
   lint:
-    name: Lint (advisory)
+    name: Lint
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Advisory until the existing violations are fixed - tracked in issue #5.
-    # When that issue is closed: drop the "|| echo" below and add "lint" to the
-    # needs list of the ci-ok job so it becomes a required gate.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -54,9 +51,8 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - run: npm ci
-      - name: ESLint (advisory)
-        run: |
-          npm run lint || echo "::warning::ESLint reported violations - see issue 5"
+      - name: ESLint
+        run: npm run lint -- --max-warnings=0
 
   test:
     name: Test (Node ${{ matrix.node }})
@@ -139,7 +135,7 @@ jobs:
   ci-ok:
     name: CI OK
     # Single aggregate check to require in branch protection.
-    needs: [typecheck, test, build, secret-scan, redis-integration]
+    needs: [typecheck, lint, test, build, secret-scan, redis-integration]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

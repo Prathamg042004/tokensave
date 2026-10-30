@@ -10,6 +10,7 @@ const dom = new JSDOM("<!doctype html><html><body></body></html>", {
 });
 Object.assign(globalThis, {
   window: dom.window,
+  self: dom.window,
   document: dom.window.document,
   HTMLElement: dom.window.HTMLElement,
   Node: dom.window.Node,
@@ -178,4 +179,30 @@ test('playground displays provider accounting and unknown amounts without invent
     assert.ok(await screen.findByText('$0.000123'));
     assert.equal(screen.getAllByText('Unavailable').length,1);
   } finally { globalThis.fetch = previousFetch; }
+});
+
+test('dashboard purges old provider credentials and keeps new keys only in memory',async()=>{
+  // Only the auth/router boundaries are mocked; render the real dashboard and use real localStorage.
+  const Module=load('node:module'),previous=Module._load,previousFetch=globalThis.fetch;
+  const fakeAuth={auth:{getSession:async()=>({data:{session:{access_token:'fake-token'}}}),getUser:async()=>({data:{user:{id:'test-user',email:'user@example.test'}}}),signOut:async()=>({})}};
+  const router={push:()=>{},replace:()=>{}};
+  const file=load.resolve('../app/dashboard/page.tsx');delete load.cache[file];
+  Module._load=function(id,parent,isMain){if(id==='next/navigation')return {useRouter:()=>router};if(id==='../supabase'&&parent?.filename===file)return {supabase:fakeAuth};return previous.call(this,id,parent,isMain);};
+  let Dashboard;
+  try{Dashboard=load(file).default;}finally{Module._load=previous;}
+  globalThis.localStorage=dom.window.localStorage;
+  localStorage.setItem('ts_keys_test-user',JSON.stringify({openai:'fake-old-secret'}));
+  localStorage.setItem('unrelated-setting','keep');
+  globalThis.fetch=async()=>Response.json({days:[],totals:{total_requests:0,tokens_saved:0,cache_hits:0,errors:0,total_cost:0,total_saved:0},recent_logs:[]});
+  try{
+    render(React.createElement(Dashboard));
+    const user=userEvent.setup();
+    await user.click(await screen.findByRole('button',{name:'API keys',exact:true}));
+    assert.equal(localStorage.getItem('ts_keys_test-user'),null);
+    assert.equal(localStorage.getItem('unrelated-setting'),'keep');
+    const input=screen.getByLabelText('OpenAI API key');
+    await user.type(input,'fake-new-secret');assert.equal(input.value,'fake-new-secret');
+    assert.equal(localStorage.getItem('ts_keys_test-user'),null);
+    await user.click(screen.getByRole('button',{name:'Clear provider keys'}));assert.equal(input.value,'');
+  }finally{globalThis.fetch=previousFetch;cleanup();localStorage.clear();}
 });
