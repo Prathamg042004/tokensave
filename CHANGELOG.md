@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### SDK accounting follow-up
 
 - Isolate returned accounting metadata from cached records, including nested usage.
-- Key credential cache scopes with a random per-instance HMAC secret.
+- Use credential-keyed HMAC cache scopes with a random per-instance salt.
 - Reject malformed response parts and inconsistent usage totals; treat corrupt cached records as misses.
 - Preserve cancellation errors during response-body reads and exercise real loopback HTTP transport without provider credits.
 

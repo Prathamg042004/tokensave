@@ -128,7 +128,7 @@ function validResponse(provider, data) {
   );
 }
 class TokenSave {
-  #cacheSecret = randomBytes(32);
+  #cacheSalt = randomBytes(32);
   constructor(config = {}) {
     this.provider = config.provider || "anthropic";
     if (!PROVIDERS.includes(this.provider))
@@ -243,8 +243,8 @@ class TokenSave {
       const key = this._hash(
         JSON.stringify({
           provider: this.provider,
-          credential: createHmac("sha256", this.#cacheSecret)
-            .update(this.apiKey)
+          credential: createHmac("sha256", this.apiKey)
+            .update(this.#cacheSalt)
             .digest("hex"),
           model,
           quality: this.quality,
