@@ -51,7 +51,7 @@ The connected TokenSave Supabase project uses Auth and had no application tables
 - Batch input is fully validated before any provider call. A 45-second shared cancellation deadline bounds provider processing; each result reports success/error accurately. Provider calls share the local account limiter and reject redirects.
 - Provider HTTP errors, invalid JSON, malformed completions and network failures use sanitized responses. No raw provider/auth/Redis messages are sent to clients. Account APIs and middleware use no-store responses.
 - Public BYOK CORS uses `*` without cookie credentials, rather than reflecting arbitrary origins. Baseline CSP restricts embedding, base URLs, objects and form actions; it is not a complete script nonce policy.
-- Provider keys are held only in page memory. Old `ts_keys_*` browser entries are purged; error-triggered session replay is disabled. Supabase session storage remains managed by its auth client.
+- Provider keys are held only in page memory. Old `ts_keys_*` browser entries are purged; error-triggered session replay is disabled. Sentry error/transaction hooks omit request bodies, headers, cookies, query/fragment values, breadcrumbs and extra fields; stack traces and route identity remain. Supabase session storage remains managed by its auth client.
 - Team creation and edits use atomic Redis creation and compare-and-swap. Duplicate invitations and removal of the owner are rejected; stale edits return 409. Invitations remain pending records, not email delivery or a membership acceptance flow.
 - Repository lint runs without exceptions for explicit any or React hook violations, and CI requires zero lint warnings. Operational Redis aggregates remain best effort and are not an invoice ledger.
 
