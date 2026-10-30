@@ -235,8 +235,12 @@ export async function POST(req: NextRequest) {
     const cacheKey = "accounting:v1:" + privateCacheKey(cleanMessages, provider, model, quality, apiKey);
     const cached = await rGet(cacheKey);
 
-    const cacheRecord = typeof cached === "string" ? JSON.parse(cached) : cached;
-    if (cacheRecord?.version === 1 && cacheRecord.accounting && cacheRecord.data) {
+    let cacheRecord;
+    try { cacheRecord = typeof cached === "string" ? JSON.parse(cached) : cached; } catch { cacheRecord = null; }
+    if (cacheRecord?.version === 1 && cacheRecord.accounting &&
+        typeof cacheRecord.accounting === "object" && !Array.isArray(cacheRecord.accounting) &&
+        (cacheRecord.accounting.cost === null || (typeof cacheRecord.accounting.cost === "number" && Number.isFinite(cacheRecord.accounting.cost) && cacheRecord.accounting.cost >= 0)) &&
+        validResponse(provider, cacheRecord.data)) {
       const latency = Date.now() - startTime;
       const meta = cacheAccounting(cacheRecord.accounting);
       await logRequest({ ...meta, cache_hit: true, provider, model: meta.model_used, latency, userId, tags: cleanTags, is_error: false });

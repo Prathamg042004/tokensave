@@ -183,3 +183,20 @@ test('small charges accumulate as integer nano-USD without disappearing in per-r
     assert.ok(!increments.some(row=>row.field.includes('micro')));
   } finally {globalThis.fetch=oldFetch;for(const [i,key] of ['UPSTASH_REDIS_REST_URL','UPSTASH_REDIS_REST_TOKEN'].entries()){if(saved[i]===undefined)delete process.env[key];else process.env[key]=saved[i];}}
 });
+
+test('corrupt or invalid cached records are misses rather than request failures',async()=>{
+  const saved=[process.env.UPSTASH_REDIS_REST_URL,process.env.UPSTASH_REDIS_REST_TOKEN];
+  process.env.UPSTASH_REDIS_REST_URL='https://redis.example.test';process.env.UPSTASH_REDIS_REST_TOKEN='test';
+  const oldFetch=globalThis.fetch;let calls=0;
+  globalThis.fetch=async()=>{calls++;return Response.json({choices:[{message:{content:'fresh'}}],usage:{prompt_tokens:10,completion_tokens:20}});};
+  try {
+    for(const cached of ['not json',{version:1,data:{},accounting:{cost:1}},{version:1,data:{choices:[{message:{content:'cached'}}]},accounting:{cost:'999'}}]) {
+      const redis=storage();redis.eval=async()=>[1,60];redis.get=async()=>cached;
+      const {POST}=loadRoute('proxy',redis);
+      const response=await POST(request({provider:'openai',apiKey:'test-provider-key',messages:[{role:'user',content:'hi'}]}));
+      assert.equal(response.status,200);
+      const data=await response.json();assert.equal(data.tokensave_meta.cache_hit,false);assert.equal(data.choices[0].message.content,'fresh');
+    }
+    assert.equal(calls,3);
+  }finally{globalThis.fetch=oldFetch;for(const [i,key] of ['UPSTASH_REDIS_REST_URL','UPSTASH_REDIS_REST_TOKEN'].entries()){if(saved[i]===undefined)delete process.env[key];else process.env[key]=saved[i];}}
+});

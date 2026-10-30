@@ -32,6 +32,9 @@ const PRICING = Object.freeze({
     },
   }),
 });
+// Keep the exported registry read-only down to individual rates.
+for (const models of Object.values(PRICING))
+  for (const rates of Object.values(models)) Object.freeze(rates);
 const PRICE_VERSION = "2026-10-30";
 const count = (value) =>
   Number.isSafeInteger(value) && value >= 0 ? value : null;
@@ -42,6 +45,16 @@ function normalizeUsage(provider, data) {
   if (!data || typeof data !== "object") return null;
   const u = provider === "google" ? data.usageMetadata : data.usage;
   if (!u || typeof u !== "object") return null;
+  const object = (value) =>
+    value !== null && typeof value === "object" && !Array.isArray(value);
+  for (const name of [
+    "prompt_tokens_details",
+    "completion_tokens_details",
+    "cache_creation",
+  ]) {
+    if (u[name] !== undefined && u[name] !== null && !object(u[name]))
+      return null;
+  }
   let input,
     output,
     cached,
@@ -81,6 +94,18 @@ function normalizeUsage(provider, data) {
     cached + write5m + write1h > input
   )
     return null;
+  const reportedTotal =
+    provider === "google"
+      ? u.totalTokenCount
+      : provider === "anthropic"
+        ? undefined
+        : u.total_tokens;
+  if (
+    reportedTotal !== undefined &&
+    reportedTotal !== null &&
+    (count(reportedTotal) === null || reportedTotal !== input + output)
+  )
+    return null;
   return {
     input_tokens: input,
     output_tokens: output,
@@ -99,7 +124,10 @@ function accounting(provider, requestedModel, data) {
       : typeof data?.modelVersion === "string"
         ? data.modelVersion
         : requestedModel;
-  const rates = PRICING[provider]?.[model];
+  const rates =
+    Object.hasOwn(PRICING, provider) && Object.hasOwn(PRICING[provider], model)
+      ? PRICING[provider][model]
+      : undefined;
   let reason = !usage
     ? "missing_or_invalid_usage"
     : !rates
@@ -162,7 +190,13 @@ function accounting(provider, requestedModel, data) {
 }
 
 function cacheAccounting(original) {
-  const avoided = original.cost;
+  original = structuredClone(original);
+  const avoided =
+    typeof original.cost === "number" &&
+    Number.isFinite(original.cost) &&
+    original.cost >= 0
+      ? original.cost
+      : null;
   return {
     ...original,
     usage_source: "cache_record",

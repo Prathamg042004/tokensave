@@ -126,3 +126,44 @@ test("cache hit avoids original recorded cost and tokens; missing pricing stays 
     null,
   );
 });
+
+test("reported totals must agree with token categories and price objects cannot be mutated", () => {
+  const data = openai(100, 20);
+  data.usage.total_tokens = 999;
+  assert.equal(accounting("openai", "gpt-4o-mini", data).cost, null);
+  data.usage.total_tokens = 120;
+  assert.equal(accounting("openai", "gpt-4o-mini", data).cost, 0.000027);
+  assert.equal(
+    normalizeUsage("google", {
+      usageMetadata: {
+        promptTokenCount: 10,
+        candidatesTokenCount: 5,
+        thoughtsTokenCount: 5,
+        totalTokenCount: 19,
+      },
+    }),
+    null,
+  );
+  assert.throws(() => {
+    PRICING.openai["gpt-4o-mini"].input = 999;
+  }, TypeError);
+  for (const name of ["__proto__", "constructor", "toString"])
+    assert.equal(accounting("openai", name, openai()).cost, null);
+});
+
+test("cache accounting does not expose its source record and rejects invalid historical charges", () => {
+  const original = accounting("openai", "gpt-4o-mini", openai());
+  const hit = cacheAccounting(original);
+  hit.usage.total_tokens = -100;
+  assert.equal(original.usage.total_tokens, 1100);
+  for (const cost of [undefined, -1, Infinity, NaN, "999"])
+    assert.equal(cacheAccounting({ ...original, cost }).cost_saved, null);
+});
+
+test("malformed usage detail objects never silently become zero-priced categories", () => {
+  for (const detail of ["invalid", 1, [], true]) {
+    const data = openai();
+    data.usage.prompt_tokens_details = detail;
+    assert.equal(accounting("openai", "gpt-4o-mini", data).cost, null);
+  }
+});

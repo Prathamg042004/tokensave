@@ -2,7 +2,7 @@
 /** TokenSave SDK v2.1.0 — Node.js 20+, server only. Copy the entire sdk/ directory.
  * Calls providers directly. No telemetry is sent. See docs/SDK.md.
  */
-const { createHash } = require("node:crypto");
+const { createHash, createHmac, randomBytes } = require("node:crypto");
 const { accounting, cacheAccounting } = require("./accounting.js");
 const PROVIDERS = ["anthropic", "openai", "google", "groq"];
 const MODELS = {
@@ -110,10 +110,12 @@ function validResponse(provider, data) {
   if (provider === "google")
     return (
       Array.isArray(data.candidates) &&
-      data.candidates.some((candidate) =>
-        candidate?.content?.parts?.some(
-          (part) => typeof part.text === "string",
-        ),
+      data.candidates.some(
+        (candidate) =>
+          Array.isArray(candidate?.content?.parts) &&
+          candidate.content.parts.some(
+            (part) => typeof part?.text === "string",
+          ),
       )
     );
   return (
@@ -126,6 +128,7 @@ function validResponse(provider, data) {
   );
 }
 class TokenSave {
+  #cacheSecret = randomBytes(32);
   constructor(config = {}) {
     this.provider = config.provider || "anthropic";
     if (!PROVIDERS.includes(this.provider))
@@ -150,7 +153,9 @@ class TokenSave {
     );
     this.timeoutMs = positive(config.timeoutMs ?? 30000, "timeoutMs", 300000);
     this.maxTokens = positive(config.maxTokens ?? 1024, "maxTokens", 100000);
-    this.fetcher = config.fetch || globalThis.fetch;
+    this.fetcher = config.fetch ?? globalThis.fetch;
+    if (typeof this.fetcher !== "function")
+      throw new TypeError("fetch must be a function");
     this.cache = new Map();
     this.models = structuredClone(MODELS);
     if (config.simpleModel)
@@ -229,7 +234,7 @@ class TokenSave {
               this.quality === "max_quality" ? "complex" : complexity
             ]
           : null);
-      if (typeof model !== "string" || !model.trim())
+      if (typeof model !== "string" || !model.trim() || model.length > 200)
         throw new TypeError(
           "An explicit model is required when routing is disabled",
         );
@@ -238,7 +243,9 @@ class TokenSave {
       const key = this._hash(
         JSON.stringify({
           provider: this.provider,
-          credential: this._hash(this.apiKey),
+          credential: createHmac("sha256", this.#cacheSecret)
+            .update(this.apiKey)
+            .digest("hex"),
           model,
           quality: this.quality,
           messages,
@@ -316,10 +323,15 @@ class TokenSave {
         try {
           data = await response.json();
         } catch {
-          throw new TokenSaveError("Provider returned invalid JSON", {
-            provider,
-            code: "invalid_response",
-          });
+          throw new TokenSaveError(
+            signal.aborted
+              ? "Request cancelled or timed out"
+              : "Provider returned invalid JSON",
+            {
+              provider,
+              code: signal.aborted ? "aborted" : "invalid_response",
+            },
+          );
         }
         if (!validResponse(provider, data))
           throw new TokenSaveError("Provider returned an invalid completion", {
@@ -341,7 +353,7 @@ class TokenSave {
         if (this.enableCache && provider === this.provider) {
           this.cache.set(key, {
             data: structuredClone(data),
-            meta,
+            meta: structuredClone(meta),
             time: Date.now(),
           });
           this._prune();
