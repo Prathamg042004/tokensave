@@ -48,25 +48,10 @@ test("compression leaves short prompts untouched", () => {
   assert.equal(out.text, "hi there");
 });
 
-test("compression removes filler and reports what it saved", () => {
+test("compression preserves filler, quoted instructions and whitespace verbatim", () => {
   const ts = new TokenSave();
-  const input =
-    "To be honest with you, I would like to say that the thing is that this " +
-    "sentence carries a great deal of filler which adds nothing of value.";
-  const out = ts._compress(input);
-  assert.ok(out.saved > 0, "expected filler phrases to be removed");
-  assert.ok(out.text.toLowerCase().indexOf("to be honest with you") === -1);
-  assert.ok(out.text.length < input.length);
-});
-
-test("compression never adds content and keeps the substance", () => {
-  const ts = new TokenSave();
-  const input =
-    "Needless to say, the deployment pipeline should stay reproducible across " +
-    "every environment we support.";
-  const out = ts._compress(input);
-  assert.ok(out.text.indexOf("deployment pipeline") !== -1);
-  assert.ok(out.text.length <= input.length);
+  const input = "To be honest with you, preserve this quoted phrase exactly.\n    And indentation.";
+  assert.deepEqual(ts._compress(input), {text: input, saved: 0});
 });
 
 test("token estimate is a non-negative integer that grows with input", () => {

@@ -49,7 +49,7 @@ const schemas = {
       tsKey: {
         type: "string",
         description:
-          "Rate-limit bucket identifier only. Not verified authentication.",
+          "Validated TokenSave credential for account attribution and rate limiting.",
       },
       model: { type: "string" },
       quality: {
@@ -57,7 +57,7 @@ const schemas = {
         enum: ["auto", "max_savings", "max_quality"],
         default: "auto",
         description:
-          "Documented values. Current runtime does not validate this enum; max_savings follows auto.",
+          "Validated quality mode; max_savings currently follows auto.",
       },
       fallbackKeys: {
         type: "object",
@@ -77,7 +77,7 @@ const schemas = {
         type: "string",
         format: "uri",
         description:
-          "Best-effort unsigned metadata delivery to an endpoint you control.",
+          "Disabled; supplying webhookUrl returns 400.",
       },
     },
     additionalProperties: true,
@@ -97,12 +97,19 @@ const schemas = {
           quality_mode: { type: "string" },
           latency_ms: { type: "number" },
           method: { type: "string" },
-          cost: { type: "number" },
-          cost_without_optimization: { type: "number" },
-          savings_percent: { type: "number" },
-          input_tokens: { type: "number" },
-          output_tokens: { type: "number" },
-          tokens_saved: { type: "string" },
+          cost: { type: ["number", "null"] },
+          cost_without_optimization: { type: ["number", "null"] },
+          savings_percent: { type: ["number", "null"] },
+          input_tokens: { type: ["number", "null"] },
+          output_tokens: { type: ["number", "null"] },
+          tokens_saved: { type: ["number", "null"] },
+          cost_saved: { type: ["number", "null"] },
+          cost_source: { type: "string" },
+          cost_unavailable_reason: { type: ["string", "null"] },
+          usage_source: { type: "string" },
+          savings_basis: { type: "string" },
+          currency: { type: "string", enum: ["USD"] },
+          pricing_version: { type: "string" },
           tags: { type: "object", additionalProperties: { type: "string" } },
           original_provider: { type: "string" },
           fallback_provider: { type: "string" },

@@ -24,22 +24,22 @@ An experimental LLM optimization service for Claude, GPT, Gemini and Groq, with 
 
 ![TokenSave public landing page — caching, model routing and compression](assets/preview.jpg)
 
-[Architecture and trust boundaries](docs/ARCHITECTURE.md) · [Security verification](docs/SECURITY_HARDENING.md) · [Automated checks](https://github.com/Prathamg042004/tokensave/actions)
+[Server SDK](docs/SDK.md) · [Usage and accounting](docs/ACCOUNTING.md) · [Architecture and trust boundaries](docs/ARCHITECTURE.md) · [Security verification](docs/SECURITY_HARDENING.md) · [Automated checks](https://github.com/Prathamg042004/tokensave/actions)
 
 ---
 
 ## Why
 
-Most tools in this space report how many **characters** they stripped out of a
-payload. TokenSave is built around the number that actually appears on your
-invoice: **dollars saved**. Four independent layers stack up:
+TokenSave reports provider token usage and versioned published-rate cost
+estimates. Cache hits can avoid repeating a generation; model routing selects
+a cheaper or more capable model heuristically. Estimates are not invoice totals:
 
 | Layer | Effect | Mechanism |
 | --- | --- | --- |
-| Semantic cache | 100% saving on a cache hit | The request never reaches the provider |
-| Cost-aware routing | Up to 66% cheaper per request | Simple prompts to a cheap model, complex prompts to a capable one |
-| Context summarisation | Large reduction on long chats | Old turns summarised, recent turns kept verbatim |
-| Prompt compression | Small reduction on every request | Filler phrases and redundant whitespace removed |
+| Exact-match cache | No new provider generation | Avoided cost estimated from the original cache record |
+| Cost-aware routing | Chooses a configured model | Routing savings require a measured baseline |
+| Context summarisation | Separate optional endpoint | Heuristic summaries may lose detail; inspect before use |
+| Prompt preservation | No destructive text changes | Compression disabled pending fidelity validation |
 
 > **On the numbers.** The percentages above and on the marketing site come from
 > internal measurement, not from a public, reproducible benchmark. A benchmark
@@ -144,7 +144,7 @@ TokenSave is pre-1.0 and maintained by one person. Being upfront about it:
 | CodeQL static analysis | Runs on every PR and weekly |
 | Supply chain (OpenSSF Scorecard, pinned actions, Dependabot) | Automated |
 | ESLint | Advisory, existing violations tracked in an open issue |
-| Test coverage | Thin: SDK helpers, pricing coverage and workflow policy only. API routes are not covered yet |
+| Test coverage | SDK behavior, provider usage/cost accounting, mocked API routes, security helpers, UI interactions and workflow policy; live-provider invoice reconciliation remains unverified |
 | SDK on npm | Not yet, `sdk/` is source only |
 | Docker image and self-host guide | Not yet |
 | Streaming and tool calling | Not supported yet |

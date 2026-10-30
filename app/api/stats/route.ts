@@ -20,7 +20,7 @@ export async function GET(req: Request) {
       const d = new Date();
       d.setDate(d.getDate() - i);
       const key = d.toISOString().split("T")[0];
-      const stats = await redis.hgetall("user_stats:" + user.id + ":" + key) || {};
+      const stats = await redis.hgetall("billing:v1:user_stats:" + user.id + ":" + key) || {};
       days.push({
         date: key,
         label: d.toLocaleDateString("en-US", { weekday: "short" }),
@@ -30,8 +30,9 @@ export async function GET(req: Request) {
         total_input_tokens: Number(stats.total_input_tokens || 0),
         total_output_tokens: Number(stats.total_output_tokens || 0),
         errors: Number(stats.errors || 0),
-        total_cost: Number(stats.total_cost_micro || 0) / 1000000,
-        total_saved: Number(stats.total_saved_micro || 0) / 1000000,
+        unknown_cost_requests: Number(stats.unknown_cost_requests || 0),
+        total_cost: Number(stats.total_cost_nano || 0) / 1000000000,
+        total_saved: Number(stats.total_saved_nano || 0) / 1000000000,
       });
     }
 
@@ -42,11 +43,12 @@ export async function GET(req: Request) {
       total_input_tokens: acc.total_input_tokens + d.total_input_tokens,
       total_output_tokens: acc.total_output_tokens + d.total_output_tokens,
       errors: acc.errors + d.errors,
+      unknown_cost_requests: acc.unknown_cost_requests + d.unknown_cost_requests,
       total_cost: acc.total_cost + d.total_cost,
       total_saved: acc.total_saved + d.total_saved,
-    }), { total_requests: 0, tokens_saved: 0, cache_hits: 0, total_input_tokens: 0, total_output_tokens: 0, errors: 0, total_cost: 0, total_saved: 0 });
+    }), { total_requests: 0, tokens_saved: 0, cache_hits: 0, total_input_tokens: 0, total_output_tokens: 0, errors: 0, unknown_cost_requests: 0, total_cost: 0, total_saved: 0 });
 
-    const logs = await redis.lrange("request_logs:" + user.id, 0, 49) || [];
+    const logs = await redis.lrange("billing:v1:request_logs:" + user.id, 0, 49) || [];
     const parsedLogs = logs.map((log: any) => {
       try { return typeof log === "string" ? JSON.parse(log) : log; } catch { return log; }
     });
@@ -64,6 +66,7 @@ export async function GET(req: Request) {
     const errorRate = totals.total_requests > 0 ? Math.round((totals.errors / totals.total_requests) * 100) : 0;
 
     return NextResponse.json({
+      accounting: {version: 1, currency: "USD", cost_source: "published_rate_estimate", savings_basis: "avoided_repeat_at_original_rate", totals_scope: "known_costs_only", historical_estimates_excluded: true},
       days,
       totals,
       recent_logs: parsedLogs,

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### SDK reliability and accounting
+
+- Server SDK: typed/sanitized failures, full provider fallback adapters, bounded timeouts and cancellation, credential/model/output-limit isolated SHA-256 cache, success-only caching, bounded retention, and cloned cache returns.
+- Shared provider-usage accounting: full output counts, native cache categories, versioned public prices, null for unknown prices/usage, and avoided-repeat cache savings instead of fixed or hypothetical numbers.
+- Verbatim prompt preservation; accurate API/playground displays; integer nano-USD aggregates in a new namespace that excludes old estimates.
+- SDK migration guide, accounting sources and regression tests. No SDK analytics transmission.
+
+
 ### Added
 
 - MIT `LICENSE` file, `SECURITY.md`, `CONTRIBUTING.md` and `CODE_OF_CONDUCT.md`

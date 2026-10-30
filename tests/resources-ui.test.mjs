@@ -153,3 +153,29 @@ test("copy failure leaves code readable and supplies a manual recovery message",
     "example code",
   );
 });
+
+test('playground displays provider accounting and unknown amounts without inventing a comparison', async () => {
+  const previousFetch = globalThis.fetch;
+  const Playground = load('../app/playground/page.tsx').default;
+  dom.window.HTMLElement.prototype.scrollIntoView = () => {};
+  let meta = {cost:null, cost_without_optimization:null, savings_percent:null, input_tokens:1234, output_tokens:9876, model_used:'unpriced-model', cache_hit:false};
+  globalThis.fetch = async () => Response.json({choices:[{message:{content:'A useful answer'}}], tokensave_meta:meta});
+  try {
+    render(React.createElement(Playground));
+    const user = userEvent.setup();
+    // Choose GPT so the response is parsed with its provider-native envelope.
+    await user.click(screen.getByRole('button', {name:/GPT/}));
+    await user.type(screen.getByLabelText('Provider API key'), 'test-key');
+    await user.type(screen.getByLabelText('Prompt'), 'hello');
+    await user.click(screen.getByRole('button', {name:'Run prompt →'}));
+    assert.ok(await screen.findByText('A useful answer'));
+    assert.equal(screen.getAllByText('Unavailable').length,2);
+    assert.ok(screen.getAllByText('—').length >= 1);
+    assert.ok(!document.body.textContent.includes('NaN'));
+    assert.ok(!document.body.textContent.includes('Infinity'));
+    meta = {...meta,cost:0.000123,cost_without_optimization:null};
+    await user.click(screen.getByRole('button',{name:'Run prompt →'}));
+    assert.ok(await screen.findByText('$0.000123'));
+    assert.equal(screen.getAllByText('Unavailable').length,1);
+  } finally { globalThis.fetch = previousFetch; }
+});

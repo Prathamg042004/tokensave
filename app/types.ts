@@ -24,11 +24,18 @@ export interface Message {
     quality_mode: string;
     latency_ms: number;
     method: string;
-    cost?: number;
-    cost_without_optimization?: number;
-    savings_percent?: number;
-    input_tokens?: number;
-    output_tokens?: number;
+    cost?: number | null;
+    cost_without_optimization?: number | null;
+    savings_percent?: number | null;
+    input_tokens?: number | null;
+    output_tokens?: number | null;
+    cost_saved?: number | null;
+    usage_source?: string;
+    cost_source?: string;
+    cost_unavailable_reason?: string | null;
+    savings_basis?: string;
+    currency?: "USD";
+    pricing_version?: string;
     tags?: Record<string, string>;
     is_error?: boolean;
     fallback_used?: boolean;
@@ -51,6 +58,7 @@ export interface Message {
     total_input_tokens: number;
     total_output_tokens: number;
     errors: number;
+    unknown_cost_requests?: number;
     total_cost: number;
     total_saved: number;
   }
@@ -64,7 +72,8 @@ export interface Message {
       total_input_tokens: number;
       total_output_tokens: number;
       errors: number;
-      total_cost: number;
+      unknown_cost_requests?: number;
+    total_cost: number;
       total_saved: number;
     };
     recent_logs: RequestLog[];

@@ -76,6 +76,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - name: SDK and accounting lint
+        run: npx eslint sdk/accounting.js sdk/tokensave.js tests/sdk-reliability.test.mjs tests/pricing-coverage.test.mjs
+      - run: npm run docs:check
 
   build:
     name: Build

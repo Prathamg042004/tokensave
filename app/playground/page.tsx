@@ -11,10 +11,7 @@ function extractText(r: any, p: string): string {
   } catch {} return "";
 }
 
-const PRICING: any = { "claude-haiku-4-5-20251001": [0.8, 4], "claude-sonnet-4-6": [3, 15], "gpt-4o-mini": [0.15, 0.6], "gpt-4o": [2.5, 10], "gemini-2.0-flash-lite": [0.075, 0.3], "gemini-2.0-flash": [0.15, 0.6], "llama-3.1-8b-instant": [0.05, 0.08], "llama-3.3-70b-versatile": [0.59, 0.79] };
-const tokens = (s: string) => Math.ceil((s || "").length / 4);
-const cost = (model: string, inT: number, outT: number) => { const p = PRICING[model] || [1, 5]; return (inT * p[0] + outT * p[1]) / 1000000; };
-const expModel = (p: string) => p === "anthropic" ? "claude-sonnet-4-6" : p === "openai" ? "gpt-4o" : p === "groq" ? "llama-3.3-70b-versatile" : "gemini-2.0-flash";
+const money = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? "$" + value.toFixed(6) : "Unavailable";
 
 const PROVIDERS = [
   { id: "anthropic", name: "Claude", color: "#D4A574", models: "Haiku · Sonnet" },
@@ -116,10 +113,11 @@ export default function Playground() {
       const data = await res.json();
       const dur = Date.now() - start;
       const text = extractText(data, provider);
-      const inT = tokens(fullPrompt), outT = tokens(text);
+      if (!res.ok) throw new Error("Provider request failed (HTTP " + res.status + ")");
+      const inT = data.tokensave_meta?.input_tokens ?? null, outT = data.tokensave_meta?.output_tokens ?? null;
       const model = data.tokensave_meta?.model_used || "unknown";
-      const without = cost(expModel(provider), inT, outT);
-      const withC = data.tokensave_meta?.cache_hit ? 0 : cost(model, inT, outT);
+      const without = data.tokensave_meta?.cost_without_optimization ?? null;
+      const withC = data.tokensave_meta?.cost ?? null;
       setResult({ text, meta: data.tokensave_meta, dur, inT, outT, without, withC, raw: JSON.stringify(data, null, 2) });
       setHistory(h => [{ prompt: prompt.slice(0, 40), cached: data.tokensave_meta?.cache_hit, model, dur }, ...h].slice(0, 15));
     } catch (e: any) { setResult({ text: "ERR:" + e.message }); }
@@ -152,7 +150,7 @@ export default function Playground() {
     if (r1.error || r2.error) throw new Error("Provider request failed");
     const t1 = extractText(r1, provider), t2 = extractText(r2, cmp2);
     const m1 = r1.tokensave_meta?.model_used || "?", m2 = r2.tokensave_meta?.model_used || "?";
-    setCmpResult({ a: { name: provider, text: t1, model: m1, cost: cost(m1, tokens(fullPrompt), tokens(t1)), meta: r1.tokensave_meta }, b: { name: cmp2, text: t2, model: m2, cost: cost(m2, tokens(fullPrompt), tokens(t2)), meta: r2.tokensave_meta } });
+    setCmpResult({ a: { name: provider, text: t1, model: m1, cost: r1.tokensave_meta?.cost ?? null, meta: r1.tokensave_meta }, b: { name: cmp2, text: t2, model: m2, cost: r2.tokensave_meta?.cost ?? null, meta: r2.tokensave_meta } });
     } catch { setRequestError("Comparison could not complete. Check both provider keys, provider limits, and your connection."); }
     finally { setCmpLoading(false); requestBusy.current = false; }
   };
@@ -160,7 +158,7 @@ export default function Playground() {
   const pName = (id: string) => PROVIDERS.find(p => p.id === id)?.name || id;
   const pColor = (id: string) => PROVIDERS.find(p => p.id === id)?.color || "#888";
   const isCache = result?.meta?.cache_hit;
-  const savePct = result?.without > 0 ? Math.round(((result.without - result.withC) / result.without) * 100) : 0;
+  const savePct = result?.meta?.savings_percent ?? null;
 
   return (
     <div className="playground-page min-h-screen bg-[#0A0D12] text-[#E8ECF4] overflow-hidden">
@@ -254,7 +252,7 @@ export default function Playground() {
                 </div>
                 <div className="flex justify-between items-center px-5 py-3 border-t border-white/[0.04]">
                   <div className="flex items-center gap-3">
-                    <span className="text-[11px] text-[#3D4654]">~{tokens(fullPrompt)} tokens</span>
+                    <span className="text-[11px] text-[#3D4654]">{fullPrompt.length.toLocaleString()} characters</span>
                     <span className="text-[10px] text-[#3D4654]">Ctrl+Enter to send</span>
                   </div>
                   <button onClick={send} disabled={loading || !apiKey || !prompt} className="relative px-6 py-2.5 bg-gradient-to-r from-[#5B8DEF] to-[#A78BFA] text-white rounded-xl text-[13px] font-semibold disabled:opacity-30 overflow-hidden group shadow-lg shadow-[#5B8DEF]/20 transition-all hover:shadow-[#5B8DEF]/40">
@@ -298,18 +296,18 @@ export default function Playground() {
                   </div>
 
                   {result.without !== undefined && (
-                    <div className="bg-[#0A0D12]/60 rounded-xl p-4"><p className="text-[11px] text-[#7A8599] mb-3">Illustrative cost estimate using approximate token counts and configured rates. Baseline assumes a higher-tier model, not your actual bill.</p>
+                    <div className="bg-[#0A0D12]/60 rounded-xl p-4"><p className="text-[11px] text-[#7A8599] mb-3">Provider-reported usage with published-rate USD estimates. Cache savings compare against the original cached request. Unavailable amounts are excluded; routing savings require a measured baseline.</p>
                       <div className="flex items-center justify-between mb-3">
-                        <div><p className="text-[9px] text-[#3D4654] uppercase">Estimated baseline</p><p className="text-[18px] font-bold text-[#FF6B6B]/60 line-through">${result.without.toFixed(6)}</p></div>
+                        <div><p className="text-[9px] text-[#3D4654] uppercase">Original cached request</p><p className="text-[18px] font-bold text-[#FF6B6B]/60 line-through">{money(result.without)}</p></div>
                         <div className="text-[#3D4654] text-2xl">→</div>
-                        <div><p className="text-[9px] text-[#3D4654] uppercase">Estimated request</p><p className="text-[18px] font-bold text-[#4ADE80]">${result.withC.toFixed(6)}</p></div>
+                        <div><p className="text-[9px] text-[#3D4654] uppercase">Estimated request</p><p className="text-[18px] font-bold text-[#4ADE80]">{money(result.withC)}</p></div>
                         <div className="bg-gradient-to-r from-[#4ADE80]/10 to-[#5B8DEF]/10 border border-[#4ADE80]/20 rounded-xl px-4 py-2 text-center">
-                          <p className="text-[24px] font-bold text-[#4ADE80]">{savePct}%</p>
-                          <p className="text-[9px] text-[#4ADE80]/60 uppercase">estimated reduction</p>
+                          <p className="text-[24px] font-bold text-[#4ADE80]">{savePct === null ? "—" : savePct + "%"}</p>
+                          <p className="text-[9px] text-[#4ADE80]/60 uppercase">cache cost avoided</p>
                         </div>
                       </div>
                       <div className="w-full h-2 bg-[#12161E] rounded-full overflow-hidden">
-                        <div className="h-full bg-gradient-to-r from-[#4ADE80] to-[#5B8DEF] rounded-full transition-all duration-1000" style={{ width: `${savePct}%` }} />
+                        <div className="h-full bg-gradient-to-r from-[#4ADE80] to-[#5B8DEF] rounded-full transition-all duration-1000" style={{ width: `${savePct === null ? "—" : savePct + "%"}` }} />
                       </div>
                     </div>
                   )}
@@ -443,8 +441,8 @@ export default function Playground() {
                     <div key={i} className="bg-[#12161E]/60 border border-white/[0.06] rounded-2xl p-5">
                       <div className="flex items-center gap-2.5 mb-4"><ProviderLogo provider={r.name} size={22} /><span className="text-[15px] font-semibold">{pName(r.name)}</span><span className="ml-auto text-[11px] text-[#3D4654] font-mono">{r.model}</span></div>
                       <div className="grid grid-cols-3 gap-2 mb-4">
-                        <div className="bg-[#0A0D12] rounded-lg p-2.5 text-center"><p className="text-[9px] text-[#3D4654]">Estimated cost</p><p className="text-[14px] font-bold text-[#4ADE80]">${r.cost.toFixed(6)}</p></div>
-                        <div className="bg-[#0A0D12] rounded-lg p-2.5 text-center"><p className="text-[9px] text-[#3D4654]">Approx. tokens</p><p className="text-[14px] font-bold text-[#5B8DEF]">{tokens(r.text)}</p></div>
+                        <div className="bg-[#0A0D12] rounded-lg p-2.5 text-center"><p className="text-[9px] text-[#3D4654]">Estimated cost</p><p className="text-[14px] font-bold text-[#4ADE80]">{money(r.cost)}</p></div>
+                        <div className="bg-[#0A0D12] rounded-lg p-2.5 text-center"><p className="text-[9px] text-[#3D4654]">Billed output tokens</p><p className="text-[14px] font-bold text-[#5B8DEF]">{r.meta?.output_tokens ?? "Unavailable"}</p></div>
                         <div className="bg-[#0A0D12] rounded-lg p-2.5 text-center"><p className="text-[9px] text-[#3D4654]">Cache</p><p className={`text-[14px] font-bold ${r.meta?.cache_hit ? "text-[#4ADE80]" : "text-[#3D4654]"}`}>{r.meta?.cache_hit ? "Hit" : "Miss"}</p></div>
                       </div>
                       <div className="bg-[#0A0D12] rounded-xl p-4 text-[13px] text-[#C8CED8] whitespace-pre-wrap max-h-52 overflow-y-auto leading-relaxed"><StreamText text={r.text || "No response"} /></div>
@@ -454,7 +452,7 @@ export default function Playground() {
                 <div className="bg-gradient-to-r from-[#5B8DEF]/5 to-[#A78BFA]/5 border border-white/[0.06] rounded-2xl p-5 text-center">
                   <p className="text-[12px] text-[#5A6577] mb-1">Estimated cost comparison · review output quality separately</p>
                   <p className="text-[18px] font-bold">
-                    {cmpResult.a.cost < cmpResult.b.cost ? <><span style={{ color: pColor(cmpResult.a.name) }}>{pName(cmpResult.a.name)}</span> <span className="text-[#4ADE80]">{Math.round(((cmpResult.b.cost - cmpResult.a.cost) / cmpResult.b.cost) * 100)}% cheaper</span></>
+                    {cmpResult.a.cost === null || cmpResult.b.cost === null ? <span className="text-[#5A6577]">Comparison unavailable: verified pricing or usage missing</span> : cmpResult.a.cost < cmpResult.b.cost ? <><span style={{ color: pColor(cmpResult.a.name) }}>{pName(cmpResult.a.name)}</span> <span className="text-[#4ADE80]">{Math.round(((cmpResult.b.cost - cmpResult.a.cost) / cmpResult.b.cost) * 100)}% cheaper</span></>
                       : cmpResult.a.cost > cmpResult.b.cost ? <><span style={{ color: pColor(cmpResult.b.name) }}>{pName(cmpResult.b.name)}</span> <span className="text-[#4ADE80]">{Math.round(((cmpResult.a.cost - cmpResult.b.cost) / cmpResult.a.cost) * 100)}% cheaper</span></>
                       : <span className="text-[#5A6577]">Same cost</span>}
                   </p>
