@@ -10,7 +10,7 @@ The proxy and server SDK use `sdk/accounting.js`. No provider request is made by
 - `cost_without_optimization`, `cost_saved`, `savings_percent`: null for a fresh generation. The unexecuted alternative has no measured cost. We do not infer model quality, routing savings, or compression savings from price differences.
 - Cache hit: `cost: 0`, `input_tokens: 0`, `output_tokens: 0`, `cost_source: no_provider_call`. `usage` retains the original response usage as reference (`usage_source: cache_record`). `tokens_saved` is the original total tokens avoided. `cost_saved` is the original estimated cost, or null if unknown. `savings_basis: avoided_repeat_at_original_rate` is an estimate of repeating that generation at the original rate, not proof of invoice savings. A zero or unknown baseline has a null percentage.
 
-Anthropic base input, native cache reads and cache writes are disjoint and summed for `input_tokens`. The cache write 5-minute and 1-hour rates differ. Legacy responses that report only aggregate cache creation use the default 5-minute rate. Inconsistent breakdowns produce unknown usage. OpenAI/Groq cached prompt tokens are a subset of prompt tokens. OpenAI completion totals already include reasoning; Gemini candidates and thoughts are added once.
+Anthropic base input, native cache reads and cache writes are disjoint and summed for `input_tokens`. The cache write 5-minute and 1-hour rates differ. Legacy responses that report only aggregate cache creation use the default 5-minute rate. Inconsistent breakdowns, malformed detail objects and conflicting provider-reported totals produce unknown usage. OpenAI/Groq cached prompt tokens are a subset of prompt tokens. OpenAI completion totals already include reasoning; Gemini candidates and thoughts are added once.
 
 ## Verified prices
 
@@ -44,4 +44,4 @@ Prompt text is preserved rather than destructively compressed. No claim of measu
 
 ## Verification
 
-`npm test` covers full-length output, native cache read/write categories, missing and invalid usage, zero denominators, unknown prices, fallback accounting, cache accounting, and successful proxy-to-cache round trips with mocked provider HTTP responses. These tests spend no provider credits. Real-provider invoice reconciliation remains a separate acceptance check.
+`npm test` covers full-length output, native cache read/write categories, missing and invalid usage, zero denominators, unknown prices, fallback accounting, cache accounting, and successful proxy-to-cache round trips with mocked provider HTTP responses. A loopback HTTP integration test additionally exercises actual fetch transport, cache savings, fallback and cancellation while consuming a response body. These tests spend no provider credits. Real-provider invoice reconciliation remains a separate acceptance check.

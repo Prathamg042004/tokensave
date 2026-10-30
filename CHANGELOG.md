@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### SDK accounting follow-up
+
+- Isolate returned accounting metadata from cached records, including nested usage.
+- Use credential-keyed HMAC cache scopes with a random per-instance salt.
+- Reject malformed response parts and inconsistent usage totals; treat corrupt cached records as misses.
+- Preserve cancellation errors during response-body reads and exercise real loopback HTTP transport without provider credits.
+
 ### SDK reliability and accounting
 
 - Server SDK: typed/sanitized failures, full provider fallback adapters, bounded timeouts and cancellation, credential/model/output-limit isolated SHA-256 cache, success-only caching, bounded retention, and cloned cache returns.

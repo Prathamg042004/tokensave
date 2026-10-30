@@ -226,3 +226,59 @@ test("stats count cache avoided cost once and expose unknown cost instead of fak
   await unknown.chat("hi");
   assert.equal(unknown.getStats().unknownCostRequests, 1);
 });
+
+test("caller changes to first and cached metadata cannot change future savings", async () => {
+  const ts = client({ fetch: async () => Response.json(good()) });
+  const first = await ts.chat("metadata isolation");
+  const originalCost = first._tokensave.cost;
+  first._tokensave.cost = 999;
+  first._tokensave.usage.total_tokens = 999999;
+  const second = await ts.chat("metadata isolation");
+  assert.equal(second._tokensave.cost_saved, originalCost);
+  assert.equal(second._tokensave.tokens_saved, 15);
+  second._tokensave.usage.total_tokens = -100;
+  const third = await ts.chat("metadata isolation");
+  assert.equal(third._tokensave.tokens_saved, 15);
+  assert.equal(
+    ts.getStats().totalSaved,
+    Math.round(originalCost * 2 * 1e9) / 1e9,
+  );
+});
+
+test("malformed provider content arrays produce sanitized typed errors", async () => {
+  for (const data of [
+    { candidates: [{ content: { parts: { text: "invalid" } } }] },
+    { candidates: [{ content: { parts: [null] } }] },
+    { candidates: [null] },
+    { candidates: "invalid" },
+  ]) {
+    const ts = client({
+      provider: "google",
+      fetch: async () => Response.json(data),
+    });
+    await assert.rejects(
+      ts.chat("hello"),
+      (e) => e instanceof TokenSaveError && e.code === "invalid_response",
+    );
+    assert.equal(ts.cache.size, 0);
+  }
+  assert.throws(() => client({ fetch: "not a function" }), TypeError);
+});
+
+test("aborts during response body consumption remain cancellation errors and are never cached", async () => {
+  const controller = new AbortController();
+  const ts = client({
+    fetch: async () => ({
+      ok: true,
+      json: async () => {
+        controller.abort();
+        throw Error("private provider body");
+      },
+    }),
+  });
+  await assert.rejects(
+    ts.chat("hello", { signal: controller.signal }),
+    (e) => e.code === "aborted" && !e.message.includes("private"),
+  );
+  assert.equal(ts.cache.size, 0);
+});
