@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Playground activity and cache response timing
+
+- Verify signed-in playground sessions on the proxy and attribute Prompt, Chat, Compare and batch activity to the account dashboard. Conflicting session/key owners are rejected.
+- Batch request counters, history and audit writes into one Redis pipeline instead of sequential HTTP round trips. Returned proxy timing now includes awaited logging.
+- Correct dashboard account-scope labels and align integration, API, pricing and homepage descriptions with current authentication, cache isolation, accounting and message-preservation behavior.
+- Add regression coverage for account attribution, cache-hit billing, invalid sessions, conflicting owners, batched writes, timing and storage failure handling.
+
 ### API correctness, security and code quality
 
 - Add shared bounded request validation, truthful batch statuses and deadlines, and strict estimated context budgets with explicit 422 responses.

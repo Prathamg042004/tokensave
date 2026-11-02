@@ -70,7 +70,7 @@ export default function Pricing() {
               "Agreed volume",
             ],
             [
-              "Caching, routing, compression",
+              "Caching, routing, accounting",
               "Core product",
               "Core product",
               "Core product; custom work quoted separately",
@@ -147,8 +147,8 @@ export default function Pricing() {
               "Cache matching and tenant isolation need review before confidential production use.",
             ],
             [
-              "Routing & compression",
-              "Rule-based model choice and final-message text trimming",
+              "Routing & context tools",
+              "Rule-based model choice; separate, explicit context trimming endpoints",
               "No guaranteed savings or output quality.",
             ],
             [
@@ -164,7 +164,7 @@ export default function Pricing() {
             [
               "Dashboard",
               "Usage visibility with cost estimates",
-              "Service-wide counters are not customer invoices.",
+              "Account-scoped estimates are not customer invoices.",
             ],
             [
               "Capacity",

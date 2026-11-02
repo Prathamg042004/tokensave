@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect, useCallback, DragEvent, ChangeEvent } from "react";
 import Link from "next/link";
 import type { TokenSaveMeta } from "../types";
+import { supabase } from "../supabase";
 import { ProviderLogo } from "../icons";
 
 type Meta = Partial<TokenSaveMeta>;
@@ -14,6 +15,18 @@ function extractText(r:ClientResponse,p:string):string {
   if(p==="anthropic")return r.content?.map(part=>part.text??"").join("")??"";
   if(p==="google")return r.candidates?.[0]?.content?.parts?.map(part=>part.text??"").join("")??"";
   return r.choices?.[0]?.message?.content??"";
+}
+
+// A browser session supplies a token only; the server verifies its owner.
+async function proxyHeaders(): Promise<Record<string, string>> {
+  const { data, error } = await supabase.auth.getSession();
+  if (error) throw new Error("Unable to read session. Sign in again.");
+  return {
+    "Content-Type": "application/json",
+    ...(data.session?.access_token
+      ? { Authorization: "Bearer " + data.session.access_token }
+      : {}),
+  };
 }
 
 const money = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? "$" + value.toFixed(6) : "Unavailable";
@@ -114,7 +127,7 @@ export default function Playground() {
     setLoading(true); setResult(null); setShowRaw(false);
     const start = Date.now();
     try {
-      const res = await fetch("/api/proxy", { method: "POST", signal: AbortSignal.timeout(60000), headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider, apiKey, messages: [{ role: "user", content: fullPrompt }] }) });
+      const res = await fetch("/api/proxy", { method: "POST", signal: AbortSignal.timeout(60000), headers: await proxyHeaders(), body: JSON.stringify({ provider, apiKey, messages: [{ role: "user", content: fullPrompt }] }) });
       const data:ClientResponse = await res.json();
       const dur = Date.now() - start;
       const text = extractText(data, provider);
@@ -136,7 +149,7 @@ export default function Playground() {
     const msgs:ChatMessage[] = [...chatMsgs, { role: "user", content }];
     setChatMsgs(msgs); setChatIn(""); setChatLoading(true);
     try {
-      const res = await fetch("/api/proxy", { method: "POST", signal: AbortSignal.timeout(60000), headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider, apiKey, messages: msgs.map(m => ({ role: m.role, content: m.content })) }) });
+      const res = await fetch("/api/proxy", { method: "POST", signal: AbortSignal.timeout(60000), headers: await proxyHeaders(), body: JSON.stringify({ provider, apiKey, messages: msgs.map(m => ({ role: m.role, content: m.content })) }) });
       const data:ClientResponse = await res.json();
       if(!res.ok)throw new Error("Provider request failed");
       setChatMsgs([...msgs, { role: "assistant", content: extractText(data, provider), meta: data.tokensave_meta }]);
@@ -149,9 +162,10 @@ export default function Playground() {
     requestBusy.current = true; setRequestError("");
     try {
     setCmpLoading(true); setCmpResult(null);
+    const headers = await proxyHeaders();
     const [r1, r2] = await Promise.all([
-      fetch("/api/proxy", { method: "POST", signal: AbortSignal.timeout(60000), headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider, apiKey, messages: [{ role: "user", content: fullPrompt }] }) }).then(async r => {if(!r.ok)throw new Error("Provider request failed");return await r.json() as ClientResponse;}),
-      fetch("/api/proxy", { method: "POST", signal: AbortSignal.timeout(60000), headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider: cmp2, apiKey: cmpKey2, messages: [{ role: "user", content: fullPrompt }] }) }).then(async r => {if(!r.ok)throw new Error("Provider request failed");return await r.json() as ClientResponse;}),
+      fetch("/api/proxy", { method: "POST", signal: AbortSignal.timeout(60000), headers, body: JSON.stringify({ provider, apiKey, messages: [{ role: "user", content: fullPrompt }] }) }).then(async r => {if(!r.ok)throw new Error("Provider request failed");return await r.json() as ClientResponse;}),
+      fetch("/api/proxy", { method: "POST", signal: AbortSignal.timeout(60000), headers, body: JSON.stringify({ provider: cmp2, apiKey: cmpKey2, messages: [{ role: "user", content: fullPrompt }] }) }).then(async r => {if(!r.ok)throw new Error("Provider request failed");return await r.json() as ClientResponse;}),
     ]);
     if (r1.error || r2.error) throw new Error("Provider request failed");
     const t1 = extractText(r1, provider), t2 = extractText(r2, cmp2);
@@ -376,7 +390,7 @@ export default function Playground() {
                   </div>
                   <p className="text-[#7A8599] text-[14px]">Optimizing and forwarding your request...</p>
                   <div className="flex items-center justify-center gap-1.5 mt-3">
-                    {["Cache check", "Routing", "Compression", "Forwarding"].map((s, i) => (
+                    {["Cache check", "Routing", "Provider", "Accounting"].map((s, i) => (
                       <span key={s} className="text-[10px] px-2 py-1 rounded-full animate-pulse" style={{ color: ["#4ADE80", "#5B8DEF", "#E8B94B", "#A78BFA"][i], backgroundColor: ["#4ADE80", "#5B8DEF", "#E8B94B", "#A78BFA"][i] + "08", animationDelay: `${i * 0.3}s` }}>{s}</span>
                     ))}
                   </div>

@@ -287,7 +287,7 @@ export default function Dashboard() {
                         <CountUp end={typeof s.value === "number" ? s.value : 0} prefix={s.prefix || ""} suffix={s.suffix} decimals={s.decimals || 0} />
                       </p>
                     )}
-                    <p className="text-[12px] text-[#94a2b9] mt-0.5">{s.suffix === "%" ? "Share of requests · 7 days" : "Across the service · 7 days"}</p>
+                    <p className="text-[12px] text-[#94a2b9] mt-0.5">{s.suffix === "%" ? "Share of requests · 7 days" : "Your account · 7 days"}</p>
                     
                   </div>
                 </FadeUp>
@@ -306,7 +306,7 @@ export default function Dashboard() {
                     <h2 className="text-[15px] font-semibold font-display">Request Volume</h2>
                     <div className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 bg-[#4ADE80] rounded-full animate-pulse" /><span className="text-[12px] text-[#94a2b9]">Last 7 days</span></div>
                   </div>
-                  {statsLoading ? <Skeleton h={200} /> : !hasData ? <div className="py-12 text-center text-[#a9b5c8]"><p>No service activity recorded yet</p><p className="text-[12px] mt-2">Requests will appear here after they are recorded.</p></div> : <AreaChart data={reqData.length > 0 ? reqData : [0,0,0,0,0,0,0]} labels={dayLabels} color="#bba6ed" height={200} />}
+                  {statsLoading ? <Skeleton h={200} /> : !hasData ? <div className="py-12 text-center text-[#a9b5c8]"><p>No account activity recorded yet</p><p className="text-[12px] mt-2">Requests will appear here after they are recorded.</p></div> : <AreaChart data={reqData.length > 0 ? reqData : [0,0,0,0,0,0,0]} labels={dayLabels} color="#bba6ed" height={200} />}
                 </div>
                 <div className="lg:col-span-2 space-y-3">
                   <div className="bg-[#121a27] backdrop-blur border border-white/[0.10] rounded-2xl p-5">

@@ -40,6 +40,23 @@ export function storage() {
   return {
     values,
     calls,
+    pipeline() {
+      const commands = [];
+      const batch = {
+        exec: async () => {
+          const results = [];
+          for (const [method, args] of commands)
+            results.push(await this[method](...args));
+          return results;
+        },
+      };
+      for (const method of ["hincrby", "lpush", "ltrim"])
+        batch[method] = (...args) => {
+          commands.push([method, args]);
+          return batch;
+        };
+      return batch;
+    },
     get: async (key) => {
       calls.push(key);
       return values.get(key) ?? null;

@@ -19,7 +19,7 @@ export const proxyFields = [
   [
     "tsKey",
     "string · optional",
-    "Validated TokenSave key associating requests with an account and account rate limit. Without it, the budget is scoped to the provider credential. Does not activate a paid plan.",
+    "Validated TokenSave key associating requests with an account and account rate limit. A verified Bearer session also establishes account scope. If both are supplied, owners must match. Anonymous requests use provider-credential scope. Does not activate a paid plan.",
   ],
   [
     "model",
@@ -29,7 +29,7 @@ export const proxyFields = [
   [
     "quality",
     "string · optional",
-    "auto (default), max_savings or max_quality. max_savings currently follows auto. max_quality skips compression and selects the capable model unless model is supplied; cache lookup happens first.",
+    "auto (default), max_savings or max_quality. max_savings currently follows auto. max_quality selects the capable model unless model is supplied. Text is preserved in all modes; cache identity includes resolved model and quality.",
   ],
   [
     "fallbackKeys",
@@ -384,17 +384,17 @@ export const internalEndpoints = [
   [
     "GET /api/stats",
     "Dashboard metrics",
-    "Service-wide seven-day aggregates, recent logs and performance estimates; not isolated customer billing.",
+    "Requires a verified Bearer session; returns only that account’s seven-day aggregates, recent logs and performance estimates. Not an invoice.",
   ],
   [
     "GET /api/audit",
     "Audit list",
-    "Requires a Bearer ts_live_ prefix in the current handler; this is not verified ownership or tenant-scoped authorization.",
+    "Requires a verified TokenSave key and reads only its owner’s audit namespace.",
   ],
   [
     "POST /api/generate-key",
     "Key management",
-    "Caller-supplied userId, optional email and action: rotate. Not a supported external authentication boundary.",
+    "Requires a verified Bearer session; a supplied userId must match it. Supports key lookup/creation and action: rotate.",
   ],
   [
     "GET/POST /api/teams",
@@ -404,12 +404,12 @@ export const internalEndpoints = [
   [
     "GET/POST /api/webhooks",
     "Webhook configuration",
-    "Stores configuration or sends test events. Stored subscriptions do not establish guaranteed delivery; the proxy uses its request-level webhookUrl.",
+    "Account-scoped configuration requires a verified session. Outbound callbacks and test delivery are disabled; proxy webhookUrl returns 400.",
   ],
   [
     "GET/POST /api/analytics",
     "SDK counters",
-    "Receives requests, cacheHits and tokensSaved counts. Counters are not provider invoices or independently verified usage.",
+    "Client-supplied counters are rejected with 410. Use authenticated stats for server-recorded account activity.",
   ],
   [
     "GET /api/batch, /api/trim-context, /api/smart-context",

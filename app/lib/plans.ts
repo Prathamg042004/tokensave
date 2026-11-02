@@ -6,7 +6,7 @@ export const plans = [
     capacity: 50000,
     description: "For a focused text workflow.",
     features: [
-      "Caching, routing and prompt compression",
+      "Caching, routing and usage accounting",
       "Dashboard visibility with estimate labels",
       "Email support scope agreed before purchase",
     ],

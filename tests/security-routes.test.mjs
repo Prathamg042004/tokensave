@@ -26,6 +26,23 @@ function loadRoute(name, redis) {
 function storage() {
   const calls=[];const values=new Map();
   return { calls,values,
+    pipeline() {
+      const commands = [];
+      const batch = {
+        exec: async () => {
+          const results = [];
+          for (const [method, args] of commands)
+            results.push(await this[method](...args));
+          return results;
+        },
+      };
+      for (const method of ["hincrby", "lpush", "ltrim"])
+        batch[method] = (...args) => {
+          commands.push([method, args]);
+          return batch;
+        };
+      return batch;
+    },
     get:async key=>{calls.push(key);return values.get(key)||null;},
     hgetall:async key=>{calls.push(key);return {};},
     lrange:async key=>{calls.push(key);return [];},
