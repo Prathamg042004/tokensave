@@ -94,8 +94,12 @@ export default function Docs() {
             </p>
             <p>
               Optional: <Link href="/login">sign in</Link> to explore the
-              dashboard. A <code>tsKey</code> currently supplies a rate-limit
-              identifier, not a verified subscription entitlement.
+              dashboard. A valid <code>tsKey</code> associates server requests
+              with its verified owner. The playground sends your signed-in
+              session in the Authorization header; the proxy verifies it before
+              attributing activity. Anonymous BYOK calls are supported but do
+              not appear in an account dashboard. Neither method activates a
+              paid plan.
             </p>
           </Section>
           <Section id="compatibility" title="02 · Know the supported surface">
@@ -123,13 +127,13 @@ export default function Docs() {
                 ],
                 [
                   "Tool calling, images, audio, structured-output options",
-                  "Not forwarded",
+                  "Unsupported",
                   "Use the direct provider for workflows requiring these capabilities.",
                 ],
                 [
                   "Provider parameters",
                   "Limited",
-                  "model is supported. temperature, max_tokens and other extra fields are not forwarded; Anthropic output limit is fixed at 1024.",
+                  "model is supported. stream, tools, temperature, max_tokens and maxTokens return 400. Provider output limit is 1024.",
                 ],
                 [
                   "Context endpoints",
@@ -142,26 +146,29 @@ export default function Docs() {
           <Section id="pipeline" title="03 · Understand the request path">
             <ol>
               <li>
-                <strong>Validate and clean:</strong> messages and key are
-                validated, control characters stripped. Proxy accepts up to 100
-                messages and 100,000 characters per message. Declared body sizes
-                above 500,000 bytes are rejected.
+                <strong>Validate:</strong> messages and credentials are checked.
+                Message formatting is preserved. Proxy accepts up to 100
+                messages and 100,000 characters per message. Actual request
+                bodies above 500,000 bytes are rejected.{" "}
               </li>
               <li>
                 <strong>Rate limit:</strong> a Redis-backed 60-request window of
-                60 seconds uses tsKey or client IP. It currently does not vary
-                by paid plan. Redis failure can disable enforcement.
+                60 seconds uses a verified account or provider-credential HMAC.
+                Forwarded IP headers do not choose the identity. Storage
+                failures return 503 rather than disabling enforcement. Paid
+                plans do not change this limit.{" "}
               </li>
               <li>
                 <strong>Look up cached content:</strong> eligible responses are
                 stored for 30 minutes when Redis is available. Matching uses a
-                hash of cleaned roles and content, not semantic similarity.
+                credential-keyed HMAC of full messages, provider, resolved model
+                and quality, not semantic similarity.
               </li>
               <li>
-                <strong>Route and compress on a miss:</strong> complexity rules
-                choose a model, or your model override is used. Except in
-                max_quality, the final message may have whitespace and filler
-                phrases removed.
+                <strong>Route on a miss:</strong> complexity rules choose a
+                model, or your model override is used. The proxy preserves
+                message text; automatic whitespace and filler removal is
+                disabled.{" "}
               </li>
               <li>
                 <strong>Call a provider:</strong> eligible rate/quota failures
@@ -175,18 +182,19 @@ export default function Docs() {
             </ol>
             <Note title="Cache matching needs production review">
               <p>
-                The current cache key does not include provider, model, quality,
-                credentials or tenant identity. A repeated prompt may reuse a
-                response across these settings. There is no request-level cache
-                bypass or public purge API. Do not treat changing quality or
-                model as an isolated experiment, or use confidential
-                multi-tenant traffic without addressing isolation.
+                Cache identities include provider credentials, provider,
+                resolved model, quality and full messages. Verified accounts
+                have separate namespaces from anonymous calls. Credential
+                sharing still shares anonymous cache scope. There is no
+                request-level bypass or public purge API; review retention
+                requirements before production use.
               </p>
             </Note>
             <p>
-              Compression can remove line breaks and meaningful formatting.
-              Validate code, JSON, quoted text and formatting-sensitive tasks.{" "}
-              <code>max_quality</code> skips compression on a cache miss.
+              Proxy message text and formatting are preserved in every quality
+              mode. Context trimming and heuristic summarization are separate
+              endpoints and can discard details; inspect their returned
+              messages.
             </p>
           </Section>
           <Section id="routing" title="04 · Choose your quality tradeoff">
@@ -205,7 +213,7 @@ export default function Docs() {
                 [
                   "auto",
                   "Rule-based simple/complex classification",
-                  "Enabled for the final message when applicable.",
+                  "Disabled; message text is preserved.",
                 ],
                 [
                   "max_savings",
@@ -215,15 +223,16 @@ export default function Docs() {
                 [
                   "max_quality",
                   "Capable path unless model overrides it",
-                  "Skipped. Cache is still checked first.",
+                  "Disabled. Cache is checked for the resolved model and quality.",
                 ],
               ]}
             />
             <p>
               Fallback tries configured credentials in Groq → Anthropic → OpenAI
               → Google order, excluding the primary. It uses complexity-based
-              model selection and may not preserve the primary model override or
-              max_quality intent. Parse according to the returned provider.
+              model selection, respects max_quality, and does not reuse the
+              primary model override on another provider. Parse according to the
+              returned provider.
             </p>
           </Section>
           <Section id="errors" title="05 · Handle failures deliberately">
@@ -304,11 +313,13 @@ export default function Docs() {
               </li>
             </ol>
             <p>
-              Token estimates use character counts; output estimates use a
-              truncated serialized provider payload. Cache-hit logs include
-              fixed savings placeholders. Neither dashboard totals nor{" "}
-              <code>savings_percent</code> are measured billing evidence. No
-              public reproducible savings benchmark is published yet.
+              Proxy token counts use provider usage fields. USD costs use a
+              versioned standard-rate registry, not invoices. Missing usage or
+              unverified prices return null. Cache hits report zero new billed
+              tokens and estimate avoided repeat cost from the original record.
+              Routing savings remain null without a measured baseline. Separate
+              context endpoints use character-based estimates. No public
+              reproducible savings benchmark is published yet.
             </p>
           </Section>
           <Section

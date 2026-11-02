@@ -39,7 +39,12 @@ export async function POST(req: Request) {
       const response = await proxyPost(
         new NextRequest(new URL("/api/proxy", req.url), {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...(req.headers.has("authorization")
+              ? { Authorization: req.headers.get("authorization")! }
+              : {}),
+          },
           body: JSON.stringify({
             ...input,
             messages: [{ role: "user", content: prompt }],

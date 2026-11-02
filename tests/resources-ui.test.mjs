@@ -157,10 +157,19 @@ test("copy failure leaves code readable and supplies a manual recovery message",
 
 test('playground displays provider accounting and unknown amounts without inventing a comparison', async () => {
   const previousFetch = globalThis.fetch;
-  const Playground = load('../app/playground/page.tsx').default;
+  const Module=load('node:module'), previousLoad=Module._load;
+  const file=load.resolve('../app/playground/page.tsx'); delete load.cache[file];
+  const fakeAuth={auth:{getSession:async()=>({data:{session:{access_token:'playground-test-session'}}})}};
+  Module._load=function(id,parent,isMain){if(id==='../supabase' && parent?.filename===file)return {supabase:fakeAuth};return previousLoad.call(this,id,parent,isMain);};
+  let Playground;
+  try { Playground=load(file).default; } finally { Module._load=previousLoad; }
   dom.window.HTMLElement.prototype.scrollIntoView = () => {};
   let meta = {cost:null, cost_without_optimization:null, savings_percent:null, input_tokens:1234, output_tokens:9876, model_used:'unpriced-model', cache_hit:false};
-  globalThis.fetch = async () => Response.json({choices:[{message:{content:'A useful answer'}}], tokensave_meta:meta});
+  globalThis.fetch = async (_url, options) => {
+    assert.equal(options.headers.Authorization,'Bearer playground-test-session');
+    assert.equal(JSON.parse(options.body).userId,undefined);
+    return Response.json({choices:[{message:{content:'A useful answer'}}], tokensave_meta:meta});
+  };
   try {
     render(React.createElement(Playground));
     const user = userEvent.setup();

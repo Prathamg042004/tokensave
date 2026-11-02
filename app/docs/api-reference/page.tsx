@@ -81,13 +81,13 @@ export default function ApiReference() {
                 ],
                 [
                   "TokenSave key",
-                  "Optional tsKey rate-limit identifier",
-                  "Not a verified authentication or paid-plan entitlement.",
+                  "Optional verified tsKey or Bearer session",
+                  "The server verifies account identity. Anonymous BYOK calls use credential scope; no paid plan is activated.",
                 ],
                 [
                   "Proxy rate window",
                   "60 requests per 60-second Redis window",
-                  "tsKey bucket, or client IP if absent. No paid-tier differentiation; Redis errors can disable enforcement.",
+                  "Verified account or provider-credential HMAC. No paid-tier differentiation; Redis limiting failures return 503.",
                 ],
                 [
                   "Size limits",
@@ -140,22 +140,22 @@ export default function ApiReference() {
                 [
                   "quality_mode / chars_saved",
                   "Quality mode; characters on a miss",
-                  "Characters removed are not tokenizer-measured tokens.",
+                  "chars_saved is currently zero because proxy text compression is disabled.",
                 ],
                 [
                   "latency_ms",
                   "Proxy timing",
-                  "Server-side elapsed time at the point measured; not full browser round trip.",
+                  "Server elapsed time through cache storage and awaited log persistence; excludes response serialization and network transit.",
                 ],
                 [
                   "cost / cost_without_optimization / savings_percent",
                   "Provider calls",
-                  "Estimated USD and comparison with a configured expensive model. Not actual savings versus your application baseline.",
+                  "Versioned published-rate USD estimates. Routing baseline and savings are null unless measured. Cache savings estimate avoided repeat cost.",
                 ],
                 [
                   "input_tokens / output_tokens",
                   "Provider calls",
-                  "Character-based estimates, not authoritative provider billing usage.",
+                  "Provider-reported usage on generation; zero new billed tokens on cache hits. Missing provider usage returns null.",
                 ],
                 [
                   "original_provider / fallback_provider",
@@ -165,7 +165,7 @@ export default function ApiReference() {
                 [
                   "tokens_saved",
                   "Cache hit",
-                  "String 100% indicates a reused response, not measured account-wide savings.",
+                  "Numeric tokens avoided from the original cache record; savings_percent is a separate field.",
                 ],
                 [
                   "tags / is_error / note",

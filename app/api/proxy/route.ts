@@ -8,6 +8,8 @@ import {
 } from "../../../sdk/tokensave.js";
 import {
   keyOwner,
+  requireUser,
+  assertOwner,
   privateCacheKey,
   accessResponse,
   readJson,
@@ -49,6 +51,7 @@ async function logRequest(data: Log) {
       timestamp: Date.now(),
       id: crypto.randomUUID(),
     };
+    const pipeline = redis.pipeline();
     const today = new Date().toISOString().slice(0, 10);
     const values = {
       total_requests: 1,
@@ -68,16 +71,16 @@ async function logRequest(data: Log) {
         : []),
     ])
       for (const [field, value] of Object.entries(values))
-        await redis.hincrby(scope, field, value);
+        pipeline.hincrby(scope, field, value);
     for (const scope of [
       "billing:v1:request_logs",
       ...(data.userId ? ["billing:v1:request_logs:" + data.userId] : []),
     ]) {
-      await redis.lpush(scope, JSON.stringify(entry));
-      await redis.ltrim(scope, 0, 99);
+      pipeline.lpush(scope, JSON.stringify(entry));
+      pipeline.ltrim(scope, 0, 99);
     }
     if (data.userId) {
-      await redis.lpush(
+      pipeline.lpush(
         "audit_log:" + data.userId,
         JSON.stringify({
           event: data.is_error ? "api_error" : "api_request",
@@ -86,13 +89,14 @@ async function logRequest(data: Log) {
           model: data.model,
         }),
       );
-      await redis.ltrim("audit_log:" + data.userId, 0, 99);
-      await redis.lpush(
+      pipeline.ltrim("audit_log:" + data.userId, 0, 99);
+      pipeline.lpush(
         "latency_log:" + data.userId,
         JSON.stringify({ latency: data.latency, timestamp: Date.now() }),
       );
-      await redis.ltrim("latency_log:" + data.userId, 0, 99);
+      pipeline.ltrim("latency_log:" + data.userId, 0, 99);
     }
+    await pipeline.exec();
   } catch {
     /* Operational counters are best effort; never return storage details or provider credentials. */
   }
@@ -165,7 +169,16 @@ export async function POST(req: Request) {
   try {
     const input = proxyInput(await readJson(req));
     provider = input.provider;
-    if (input.tsKey !== undefined) userId = await keyOwner(redis, input.tsKey);
+    const sessionUser = req.headers.has("authorization")
+      ? await requireUser(req)
+      : undefined;
+    if (input.tsKey !== undefined) {
+      const owner = await keyOwner(redis, input.tsKey);
+      if (sessionUser) assertOwner(owner, sessionUser.id);
+      userId = owner;
+    } else {
+      userId = sessionUser?.id;
+    }
     const budget = await consumeRateLimit(
       redis,
       rateLimitScope(userId, provider, input.apiKey),
@@ -233,7 +246,7 @@ export async function POST(req: Request) {
             cache_hit: true,
             method: "cache",
             quality_mode: input.quality,
-            latency_ms: latency,
+            latency_ms: Date.now() - start,
             tags: input.tags,
           },
         },
@@ -297,7 +310,7 @@ export async function POST(req: Request) {
             complexity: level,
             chars_saved: 0,
             quality_mode: input.quality,
-            latency_ms: latency,
+            latency_ms: Date.now() - start,
             method: isFallback
               ? "fallback"
               : level === "simple"
