@@ -45,7 +45,7 @@ test("verified playground session attributes misses and hits, batches log writes
   let generations = 0,
     execs = 0;
   globalThis.fetch = async (url) =>
-    String(url).startsWith("https://auth.test")
+    new URL(String(url)).href === "https://auth.test/auth/v1/user"
       ? Response.json({ id: "owner" })
       : (generations++, Response.json(fixture));
   redis.hincrby = async (k, f, v) => increments.push([k, f, v]);
@@ -85,14 +85,14 @@ test("invalid session or conflicting API-key owner cannot generate, read cache, 
   const redis = storage();
   let generations = 0;
   globalThis.fetch = async (url) =>
-    String(url).startsWith("https://auth.test")
+    new URL(String(url)).href === "https://auth.test/auth/v1/user"
       ? new Response("", { status: 401 })
       : (generations++, Response.json(fixture));
   let response = await loadRoute("proxy", redis).POST(signed());
   assert.equal(response.status, 401);
   assert.equal(redis.calls.length, 0);
   globalThis.fetch = async (url) =>
-    String(url).startsWith("https://auth.test")
+    new URL(String(url)).href === "https://auth.test/auth/v1/user"
       ? Response.json({ id: "owner" })
       : (generations++, Response.json(fixture));
   const key = "ts_live_" + "a".repeat(32);
@@ -109,7 +109,7 @@ test("batch preserves verified session attribution for every prompt", async (t) 
   const redis = storage(),
     logs = [];
   globalThis.fetch = async (url) =>
-    String(url).startsWith("https://auth.test")
+    new URL(String(url)).href === "https://auth.test/auth/v1/user"
       ? Response.json({ id: "owner" })
       : Response.json(fixture);
   redis.lpush = async (k, v) => logs.push([k, JSON.parse(v)]);
